@@ -859,7 +859,7 @@ function initReadingStudio() {
   if (analyzeBtn) {
     analyzeBtn.onclick = () => {
       const text = document.getElementById('readingInput').value.trim();
-      if (!text) { alertDlg('請先粘貼或選擇英文文章段落'); return; }
+      if (!text) { alertDlg('請先貼上或選擇英文文章段落'); return; }
       analyzeReadingText(text);
     };
   }

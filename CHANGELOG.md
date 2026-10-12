@@ -2,6 +2,18 @@
 
 本專案遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-TW/) 語意化版本規範，並採用 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/) 格式記錄變更。
 
+## [1.1.0] - 2026-10-12
+
+### 🌐 香港繁體中文在地化 (Hong Kong Traditional Chinese Localization)
+- **全面完成全專案介面港式繁體中文轉化**：
+  - `index.html`：將 `<html lang="zh-CN">` 更新為 `<html lang="zh-HK">`，頁面標題改為《SprechMate UK 英國英音私教》。
+  - 全數靜態 HTML、對話清單、抽屜、設定面版、跟讀卡片與錄音糾音評分元件全面換裝香港繁體語彙（如「對話清單」、「搜尋」、「匯出／匯入」、「儲存」、「設定」、「評分」、「錄音」、「網絡」、「快取」、「繁體中文 (香港)」、「水電煤氣」等）。
+  - 全面更新 `STR.zh` 雙語本地化字典（300+ 鍵值），消除簡體字及大陸用語。
+  - 將 5 大情境提示詞範本（NHS 預約、市政稅與垃圾回收、租屋維修交涉、Pub 社交文化、新聞閱讀助教）全面轉化為道地港式繁體。
+  - `manifest.json`：PWA 應用程式名稱、描述及快捷操作全面支援香港繁體中文。
+  - `quotes.js` & `quotes.csv`：400 則名言庫全面轉化為香港繁體中文，打卡卡片視覺生成文字一致。
+  - 語音與地區清單：Azure Speech 伺服器地區名稱與語音角色標籤全面港化。
+
 ---
 
 ## [1.0.0] - 2026-10-12

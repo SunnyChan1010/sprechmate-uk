@@ -35,8 +35,9 @@ npm-debug.log*
 .idea/
 *.swp
 
-# wrangler files
+# wrangler & cloudflare files
 .wrangler
+.cloudflare/
 .dev.vars*
 !.dev.vars.example
 .env*

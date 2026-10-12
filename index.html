@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-HK">
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
@@ -11,7 +11,7 @@
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png"/>
 <link rel="icon" type="image/png" sizes="192x192" href="icon-192.png"/>
 <link rel="apple-touch-icon" href="icon-192.png"/>
-<title>芯语伴 SprechMate</title>
+<title>SprechMate UK 英國英音私教</title>
 <style>
 :root{--bg:#f5f3ff;--card:#fff;--ink:#1e1b2e;--mut:#6b7280;--pri:#6d28d9;--pri-d:#5b21b6;--line:#e9e4f5;--ok:#16a34a;--warn:#d97706;--bad:#dc2626}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
@@ -341,10 +341,10 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
 </head>
 <body>
 <header class="appbar">
-  <button id="menuBtn" class="iconbtn" data-i18n-aria="drawer.title" aria-label="对话列表">☰</button>
+  <button id="menuBtn" class="iconbtn" data-i18n-aria="drawer.title" aria-label="對話清單">☰</button>
   <button id="navBackBtn" class="iconbtn nav-back hidden" data-i18n-aria="nav.back" aria-label="返回">‹</button>
-  <div><h1 data-i18n="app.name">芯语伴</h1><p data-i18n="app.tagline">聊天 → 点句听原声 → 录音纠音</p></div>
-  <button id="settingsBtn" class="iconbtn settings-btn" data-i18n-aria="nav.settings" aria-label="设置"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+  <div><h1 data-i18n="app.name">SprechMate UK</h1><p data-i18n="app.tagline">聊天 → 點句聽原聲 → 錄音糾音</p></div>
+  <button id="settingsBtn" class="iconbtn settings-btn" data-i18n-aria="nav.settings" aria-label="設定"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
 </header>
 
 <nav class="app-tabs" id="appTabs">
@@ -355,14 +355,14 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
 </nav>
 
 <aside id="drawer" class="drawer">
-  <div class="drawer-head"><b data-i18n="drawer.title">对话列表</b><button id="closeDrawer">✕</button></div>
-  <div class="search-row"><input id="convSearch" type="search" data-i18n-ph="drawer.searchPh" placeholder="搜索对话" autocomplete="off"/></div>
-  <button id="exportAllBtn"><svg class="ic-dl" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M4.5 7.5 8 11l3.5-3.5M3 13.5h10"/></svg> <span data-i18n="drawer.exportAll">导出所有对话</span></button>
+  <div class="drawer-head"><b data-i18n="drawer.title">對話清單</b><button id="closeDrawer">✕</button></div>
+  <div class="search-row"><input id="convSearch" type="search" data-i18n-ph="drawer.searchPh" placeholder="搜尋對話" autocomplete="off"/></div>
+  <button id="exportAllBtn"><svg class="ic-dl" viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 2v8M4.5 7.5 8 11l3.5-3.5M3 13.5h10"/></svg> <span data-i18n="drawer.exportAll">匯出所有對話</span></button>
   <div id="convList"></div>
   <div class="drawer-btns">
-    <button id="delOldBtn" class="danger" data-i18n="drawer.del10">删除 10 天前的对话</button>
-    <button id="delOld30Btn" class="danger" data-i18n="drawer.del30">删除 30 天前的对话</button>
-    <button id="delAllBtn" class="danger" data-i18n="drawer.delAll">删除所有对话</button>
+    <button id="delOldBtn" class="danger" data-i18n="drawer.del10">刪除 10 天前的對話</button>
+    <button id="delOld30Btn" class="danger" data-i18n="drawer.del30">刪除 30 天前的對話</button>
+    <button id="delAllBtn" class="danger" data-i18n="drawer.delAll">刪除所有對話</button>
   </div>
 </aside>
 <div id="scrim" class="scrim hidden"></div>
@@ -370,27 +370,27 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
 <main>
   <section id="view-practice">
     <div id="keyGuide" class="key-guide hidden">
-      <div class="key-guide-text"><b data-i18n="guide.title">还没配置聊天接口</b><span data-i18n="guide.desc">点右上角齿轮，填好 Base URL、模型和 Key 就能开始聊天。</span></div>
-      <button id="keyGuideBtn" class="key-guide-go" data-i18n="guide.go">去设置</button>
-      <button id="keyGuideX" class="key-guide-x" aria-label="关闭">✕</button>
+      <div class="key-guide-text"><b data-i18n="guide.title">尚未設定對話 API 介面</b><span data-i18n="guide.desc">點擊右上角齒輪，填妥 Base URL、模型與 Key 即可開始對話。</span></div>
+      <button id="keyGuideBtn" class="key-guide-go" data-i18n="guide.go">前往設定</button>
+      <button id="keyGuideX" class="key-guide-x" aria-label="關閉">✕</button>
     </div>
     <div class="card">
-      <div class="chat-head"><select id="convPromptSel" class="conv-prompt-sel" data-i18n-title="chat.promptTitle" title="当前对话使用的提示词模板"></select><button id="newChatBtn2" class="linkbtn" data-i18n="chat.new">＋ 新对话</button></div>
+      <div class="chat-head"><select id="convPromptSel" class="conv-prompt-sel" data-i18n-title="chat.promptTitle" title="目前對話使用的提示詞範本"></select><button id="newChatBtn2" class="linkbtn" data-i18n="chat.new">＋ 新對話</button></div>
       <div id="chatList" class="chat-list"></div>
       <div class="chat-input">
         <button id="clearBtn" class="clearbtn" data-i18n-aria="chat.clear" aria-label="清空" data-i18n-title="chat.clearTitle" title="清空 (Alt+A)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
-        <textarea id="chatInput" rows="4" placeholder="用德语说点什么…"></textarea>
-        <button id="micBtn" class="micbtn" data-i18n-aria="chat.dict" aria-label="语音输入" data-i18n-title="chat.dictTitle" title="语音输入 (Alt+S)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="17" x2="12" y2="21"/></svg></button>
+        <textarea id="chatInput" rows="4" placeholder="用英語說點甚麼…"></textarea>
+        <button id="micBtn" class="micbtn" data-i18n-aria="chat.dict" aria-label="語音輸入" data-i18n-title="chat.dictTitle" title="語音輸入 (Alt+S)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10a7 7 0 0 0 14 0"/><line x1="12" y1="17" x2="12" y2="21"/></svg></button>
       </div>
 
     </div>
 
     <div class="card" id="sentenceCard">
       <h2 id="sentenceTitle"></h2>
-      <textarea id="sentenceText" rows="2" data-i18n-ph="sent.ph" placeholder="点击上方对话中的一句话，这里会自动填入"></textarea>
+      <textarea id="sentenceText" rows="2" data-i18n-ph="sent.ph" placeholder="點擊上方對話中的一句話，此處會自動填入"></textarea>
       <div class="btn-row">
-        <button id="genBtn" class="primary" data-i18n="sent.gen">生成原声</button>
-        <button id="dlRefBtn" data-i18n="sent.dl">下载原声</button>
+        <button id="genBtn" class="primary" data-i18n="sent.gen">生成原聲</button>
+        <button id="dlRefBtn" data-i18n="sent.dl">下載原聲</button>
       </div>
       <div class="player">
         <div class="rate-row" id="refRateRow">
@@ -406,15 +406,15 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
           <span class="time" id="refDur">0:00</span>
         </div>
         <div class="player-ctrl">
-          <button id="refPlayBtn" class="playbtn pill" data-i18n-title="sent.playTitle" title="播放原声 (S)" disabled><span class="ic-play"></span><span data-i18n="sent.play">播放</span></button>
+          <button id="refPlayBtn" class="playbtn pill" data-i18n-title="sent.playTitle" title="播放原聲 (S)" disabled><span class="ic-play"></span><span data-i18n="sent.play">播放</span></button>
         </div>
       </div>
 
     </div>
 
     <div class="card" id="recordCard">
-      <h2 data-i18n="rec.title">录音打分</h2>
-      <button id="recBtn" class="recbtn" data-i18n-title="rec.startTitle" title="开始录音 (D)"><span class="recdot"></span><span id="recLabel" data-i18n="rec.start">开始录音</span></button>
+      <h2 data-i18n="rec.title">錄音評分</h2>
+      <button id="recBtn" class="recbtn" data-i18n-title="rec.startTitle" title="開始錄音 (D)"><span class="recdot"></span><span id="recLabel" data-i18n="rec.start">開始錄音</span></button>
       <div id="recStatus" class="hidden">
         <div class="meter"><i id="meterFill"></i></div>
         <div class="recphase"><span id="recSpin" class="spinner hidden"></span><span id="recPhase"></span></div>
@@ -426,12 +426,12 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
           <span class="time" id="myDur">0:00</span>
         </div>
         <div class="player-ctrl">
-          <button id="myPlayBtn" class="playbtn pill" data-i18n-title="rec.playTitle" title="播放我的录音 (F)" disabled><span class="ic-play"></span><span data-i18n="sent.play">播放</span></button>
+          <button id="myPlayBtn" class="playbtn pill" data-i18n-title="rec.playTitle" title="播放我的錄音 (F)" disabled><span class="ic-play"></span><span data-i18n="sent.play">播放</span></button>
         </div>
       </div>
       <div id="recHint" class="hint"></div>
       <div id="resultCard" class="result hidden"></div>
-      <h3 data-i18n="rec.history">练习历史（本对话）</h3>
+      <h3 data-i18n="rec.history">練習紀錄（本對話）</h3>
 
       <div id="historyList"></div>
     </div>
@@ -450,14 +450,14 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
           <option value="">-- 點此載入精選語料 --</option>
           <option value="gov_rent">🏠 GOV.UK 官方租房指南 (Tenancy Checklist)</option>
           <option value="nhs_guide">🏥 NHS 求醫看診指南 (111 vs GP vs 999)</option>
-          <option value="mse_energy">⚡ 水電瓦斯帳單解析 (MSE Energy Price Cap)</option>
+          <option value="mse_energy">⚡ 水電煤氣帳單解析 (MSE Energy Price Cap)</option>
           <option value="bbc_cost">📰 英國生活成本與央行通脹 (BBC Economy)</option>
           <option value="reddit_pub">🍻 英國 Pub 吧台潛規則 (Reddit r/AskUK)</option>
         </select>
       </div>
       <div class="field">
-        <label>或自行粘貼任何英文長文（新聞、租約、信件、社群討論）：</label>
-        <textarea id="readingInput" rows="4" placeholder="在此粘貼英語文章或條款段落…"></textarea>
+        <label>或自行貼上任何英文長文（新聞、租約、信件、社群討論）：</label>
+        <textarea id="readingInput" rows="4" placeholder="在此貼上英語文章或條款段落…"></textarea>
       </div>
       <div class="btn-row">
         <button id="analyzeReadingBtn" class="primary">開始智慧斷句精讀</button>
@@ -484,7 +484,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
         <div class="stat-item"><b id="streakDaysLabel">1</b><small>連續天數</small></div>
       </div>
       <div id="offlineTubeNotice" class="offline-banner hidden">
-        🚇 檢測到離線（如在倫敦地鐵），已自動切換為「離線聽音自測模式」。您可以照常聆聽已快取的原聲並自評，不消耗網絡。
+        🚇 偵測到處於離線狀態（如在倫敦地鐵），已自動切換為「離線聽音自測模式」。您可以照常聆聽已快取的原聲並自評，不消耗網絡流量。
       </div>
     </div>
 
@@ -501,7 +501,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
       <h3 style="margin-bottom:6px">今日重溫任務已全部完成！</h3>
       <p class="mut" style="font-size:13px;line-height:1.5">您已攻克所有到期英式語塊，發音肌肉記憶進一步鞏固！</p>
       <div class="btn-row" style="margin-top:16px">
-        <button id="exportAnkiBtn" class="ghost-btn">📥 匯出為 Anki 單字卡</button>
+        <button id="exportAnkiBtn" class="ghost-btn">📥 匯出為 Anki 記憶卡</button>
         <button id="exportBackupJsonBtn" class="ghost-btn">💾 備份全量進度 JSON</button>
       </div>
     </div>
@@ -510,7 +510,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
     <div class="card">
       <div class="section-title-row">
         <h3>⭐ 我的英式在地語塊本</h3>
-        <button id="importBackupJsonBtn" class="linkbtn">還原/導入進度</button>
+        <button id="importBackupJsonBtn" class="linkbtn">還原／匯入進度</button>
         <input type="file" id="importBackupFileInput" class="hidden" accept=".json"/>
       </div>
       <div id="phrasebookList"></div>
@@ -560,13 +560,13 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
 
   <section id="view-settings" class="hidden">
     <div class="card">
-      <h2 data-i18n="set.usage">用量统计</h2>
+      <h2 data-i18n="set.usage">用量統計</h2>
       <div class="day-box">
         <table class="day-table">
           <tbody>
             <tr>
               <td rowspan="3" class="rowbtn"><button id="shareCardBtn" type="button" class="th-share" data-i18n="set.todayCheckin">今日打卡</button></td>
-              <th data-i18n="set.dayChat">对话</th><th data-i18n="set.dayTts">听原声</th><th data-i18n="set.dayAssess">录音练习</th><th data-i18n="set.dayCost">花费</th>
+              <th data-i18n="set.dayChat">對話</th><th data-i18n="set.dayTts">聽原聲</th><th data-i18n="set.dayAssess">錄音練習</th><th data-i18n="set.dayCost">花費</th>
             </tr>
             <tr>
               <td id="uqDayChat">0</td>
@@ -576,10 +576,10 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
             </tr>
             <tr>
               <td colspan="2" class="sync-cell">
-                <button id="syncGenBtn" type="button" class="sync-btn" data-i18n="set.genSync">生成同步码</button>
+                <button id="syncGenBtn" type="button" class="sync-btn" data-i18n="set.genSync">產生同步碼</button>
               </td>
               <td colspan="2" class="sync-cell">
-                <button id="syncScanBtn" type="button" class="sync-btn" data-i18n="set.scanSync">扫码同步</button>
+                <button id="syncScanBtn" type="button" class="sync-btn" data-i18n="set.scanSync">掃碼同步</button>
               </td>
             </tr>
           </tbody>
@@ -587,7 +587,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
       </div>
       <div class="quota2">
         <div class="quota">
-          <span class="q-label" data-i18n="set.ttsQuota">原声生成（本月）</span>
+          <span class="q-label" data-i18n="set.ttsQuota">原聲生成（本月）</span>
           <div class="qbar">
             <i id="uqTtsBar"></i>
             <span class="qbar-t qbar-t-dark" id="uqTtsTextA">–</span>
@@ -595,7 +595,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
           </div>
         </div>
         <div class="quota">
-          <span class="q-label" data-i18n="set.assessQuota">发音评估（本月）</span>
+          <span class="q-label" data-i18n="set.assessQuota">發音評估（本月）</span>
           <div class="qbar">
             <i id="uqSpeechBar"></i>
             <span class="qbar-t qbar-t-dark" id="uqSpeechTextA">–</span>
@@ -604,59 +604,59 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
         </div>
       </div>
       <div class="stat6">
-        <div class="s6"><span data-i18n="set.inTokens">输入量</span><b id="uqIn">0</b></div>
-        <div class="s6"><span data-i18n="set.pricePerM">百万单价</span><input id="setPriceIn" type="text" inputmode="decimal" placeholder="0"/></div>
-        <div class="s6"><span data-i18n="set.outTokens">输出量</span><b id="uqOut">0</b></div>
-        <div class="s6"><span data-i18n="set.pricePerM">百万单价</span><input id="setPriceOut" type="text" inputmode="decimal" placeholder="0"/></div>
-        <div class="s6"><span data-i18n="set.cachedTokens">缓存量</span><b id="uqCached">0</b></div>
-        <div class="s6"><span data-i18n="set.pricePerM">百万单价</span><input id="setPriceCached" type="text" inputmode="decimal" placeholder="0"/></div>
+        <div class="s6"><span data-i18n="set.inTokens">輸入量</span><b id="uqIn">0</b></div>
+        <div class="s6"><span data-i18n="set.pricePerM">每百萬單價</span><input id="setPriceIn" type="text" inputmode="decimal" placeholder="0"/></div>
+        <div class="s6"><span data-i18n="set.outTokens">輸出量</span><b id="uqOut">0</b></div>
+        <div class="s6"><span data-i18n="set.pricePerM">每百萬單價</span><input id="setPriceOut" type="text" inputmode="decimal" placeholder="0"/></div>
+        <div class="s6"><span data-i18n="set.cachedTokens">快取量</span><b id="uqCached">0</b></div>
+        <div class="s6"><span data-i18n="set.pricePerM">每百萬單價</span><input id="setPriceCached" type="text" inputmode="decimal" placeholder="0"/></div>
       </div>
       <div class="cost-row">
-        <span><span data-i18n="set.estCost">预估花费：</span><b id="uqCost">0.00</b></span>
-        <button id="resetChatBtn" type="button" class="danger" data-i18n="set.resetChat">重置聊天统计</button>
+        <span><span data-i18n="set.estCost">預估花費：</span><b id="uqCost">0.00</b></span>
+        <button id="resetChatBtn" type="button" class="danger" data-i18n="set.resetChat">重設對話統計</button>
       </div>
     </div>
     <div class="card">
-      <h2 data-i18n="set.langDisplay">语言与显示</h2>
+      <h2 data-i18n="set.langDisplay">語言與顯示</h2>
       <div class="field-row">
       <div class="field half">
-        <label data-i18n="set.learnLang">学习语言</label>
+        <label data-i18n="set.learnLang">學習語言</label>
         <select id="setLearnLang"></select>
       </div>
       <div class="field half">
-        <label data-i18n="set.uiLang">界面语言</label>
+        <label data-i18n="set.uiLang">介面語言</label>
         <select id="setUiLang">
-          <option value="zh" data-i18n="set.uiLangZh">中文</option>
+          <option value="zh" data-i18n="set.uiLangZh">繁體中文 (香港)</option>
           <option value="en" data-i18n="set.uiLangEn">English</option>
         </select>
       </div>
       </div>
       <div class="field check-row">
-        <label><input id="setAutoSpeak" type="checkbox"/> <span data-i18n="set.autoSpeak">自动朗读回复</span></label>
+        <label><input id="setAutoSpeak" type="checkbox"/> <span data-i18n="set.autoSpeak">自動朗讀回覆</span></label>
       </div>
       <div class="field check-row sub-row" id="showDeRow">
-        <label><input id="setShowDe" type="checkbox"/> <span id="showDeLabel">显示德语</span> <span class="hint" data-i18n="set.dblHint">双击切换显隐</span></label>
+        <label><input id="setShowDe" type="checkbox"/> <span id="showDeLabel">顯示英語</span> <span class="hint" data-i18n="set.dblHint">雙擊切換顯示／隱藏</span></label>
       </div>
       <div class="field check-row">
-        <label><input id="setShowZh" type="checkbox"/> <span id="showZhLabel">显示中文</span> <span class="hint" data-i18n="set.dblHint">双击切换显隐</span></label>
+        <label><input id="setShowZh" type="checkbox"/> <span id="showZhLabel">顯示中文</span> <span class="hint" data-i18n="set.dblHint">雙擊切換顯示／隱藏</span></label>
       </div>
       <div class="tpl-box">
-        <label data-i18n="set.tpl">提示词模板</label>
-        <p class="desc" data-i18n="set.tplDesc">新对话用这里选中的模板；当前对话在聊天页顶部切换。</p>
-        <p class="desc" data-i18n="set.tplQuoteTip">约定：让 AI 把译文写成引用行（行首加 &gt; ），App 会自动识别为译文，可单独隐藏、双击切换显隐，朗读和打分时也会跳过。</p>
+        <label data-i18n="set.tpl">提示詞範本</label>
+        <p class="desc" data-i18n="set.tplDesc">新對話使用此處選取的範本；目前對話可在聊天頁頂部切換。</p>
+        <p class="desc" data-i18n="set.tplQuoteTip">約定：讓 AI 將譯文寫成引用行（行首加 &gt; ），應用程式會自動識別為譯文，可單獨隱藏、雙擊切換顯示／隱藏，朗讀和評分時亦會跳過。</p>
         <div class="tpl-row">
           <select id="setPromptSel"></select>
-          <button id="newTplBtn" type="button" class="mini-btn" data-i18n="set.tplNew">＋新建</button>
+          <button id="newTplBtn" type="button" class="mini-btn" data-i18n="set.tplNew">＋新增</button>
         </div>
-        <textarea id="setPrompt" rows="6" data-i18n-ph="set.tplPh" placeholder="在这里写提示词…"></textarea>
+        <textarea id="setPrompt" rows="6" data-i18n-ph="set.tplPh" placeholder="在此編寫提示詞…"></textarea>
         <div class="tpl-actions">
-          <button id="renameTplBtn" type="button" class="tpl-btn" data-i18n="set.tplRename">重命名</button>
-          <button id="delTplBtn" type="button" class="tpl-btn danger" data-i18n="set.tplDel">删除</button>
+          <button id="renameTplBtn" type="button" class="tpl-btn" data-i18n="set.tplRename">重新命名</button>
+          <button id="delTplBtn" type="button" class="tpl-btn danger" data-i18n="set.tplDel">刪除</button>
         </div>
       </div>
     </div>
     <div class="card">
-      <h2 data-i18n="set.chatApi">聊天接口（OpenAI 兼容）</h2>
+      <h2 data-i18n="set.chatApi">對話介面 API（兼容 OpenAI）</h2>
       <div class="field">
         <label>Base URL（Endpoint）</label>
         <input id="setBaseUrl" type="text" placeholder="https://openrouter.ai/api/v1"/>
@@ -666,9 +666,9 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
         <input id="setModel" type="text" data-i18n-ph="set.modelPh" placeholder="例如 openai/gpt-4o-mini"/>
       </div>
       <div class="field">
-        <label><span data-i18n="set.reasoningEffort">思考强度</span> <span class="hint" data-i18n="set.reHint">（思考模型可用，各家取值不同）</span></label>
+        <label><span data-i18n="set.reasoningEffort">思考強度</span> <span class="hint" data-i18n="set.reHint">（思考模型適用，各供應商設定值不同）</span></label>
         <select id="setReasoningEffort">
-          <option value="" data-i18n="set.reDefault">不发送（默认）</option>
+          <option value="" data-i18n="set.reDefault">不發送（預設）</option>
           <option value="none">none</option>
           <option value="minimal">minimal</option>
           <option value="low">low</option>
@@ -684,13 +684,13 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
         <input id="setKey" type="password" autocomplete="off" placeholder="sk-..."/>
       </div>
       <div class="test-row">
-        <button id="testChatBtn" data-i18n="set.testConn">测试连接</button>
+        <button id="testChatBtn" data-i18n="set.testConn">測試連線</button>
         <span id="chatTestMsg" class="test-msg"></span>
       </div>
     </div>
 
     <div class="card">
-      <h2 data-i18n="set.azure">Azure Speech（发音评估 + 原声 TTS）</h2>
+      <h2 data-i18n="set.azure">Azure Speech（發音評估 + 原聲 TTS）</h2>
       <div class="field">
         <label>Speech Key</label>
         <input id="setAzKey" type="password" autocomplete="off" placeholder="Azure Speech Key 1"/>
@@ -700,56 +700,56 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
         <select id="setRegion"></select>
       </div>
       <div class="field">
-        <label id="voiceLabel">德语原声声音（声音列表跟随学习语言）</label>
+        <label id="voiceLabel">英音原聲語音（語音清單隨學習語言切換）</label>
         <select id="setVoice"></select>
       </div>
       <div class="test-row">
-        <button id="testTtsBtn" data-i18n="set.testTts">测试 TTS</button>
+        <button id="testTtsBtn" data-i18n="set.testTts">測試 TTS</button>
         <span id="ttsTestMsg" class="test-msg"></span>
       </div>
     </div>
 
     <div class="card">
-      <h2 data-i18n="set.storage">本地存储</h2>
+      <h2 data-i18n="set.storage">本機儲存</h2>
       <div class="field">
-        <label data-i18n="set.chatLimit">聊天记录保留条数（1–200）</label>
+        <label data-i18n="set.chatLimit">對話紀錄保留條數（1–200）</label>
         <input id="setChatLimit" type="number" min="1" max="200" step="1"/>
-        <p class="desc" data-i18n="set.chatLimitDesc">发给 AI 的消息条数，含你当前这句。设为 1 则 AI 不看历史。改小立即生效，删掉的消息找不回来。</p>
+        <p class="desc" data-i18n="set.chatLimitDesc">發送予 AI 的訊息條數，包含目前此句。設定為 1 則 AI 不讀取歷史。調小立即生效，已刪除的訊息無法復原。</p>
       </div>
       <div class="field">
-        <label data-i18n="set.recLimit">练习记录保留条数（1–200）</label>
+        <label data-i18n="set.recLimit">練習紀錄保留條數（1–200）</label>
         <input id="setRecLimit" type="number" min="1" max="200" step="1"/>
-        <p class="desc" data-i18n="set.recLimitDesc">每个对话保留最近 N 条练习，超出的连录音一起删。改小立即生效。</p>
+        <p class="desc" data-i18n="set.recLimitDesc">每個對話保留最近 N 條練習紀錄，超出的部分連同錄音一併刪除。調小立即生效。</p>
       </div>
       <div class="field">
-        <label data-i18n="set.ttsLimit">原声缓存条数（0–500，0 = 关闭）</label>
+        <label data-i18n="set.ttsLimit">原聲快取條數（0–500，0 = 關閉）</label>
         <input id="setTtsLimit" type="number" min="0" max="500" step="1"/>
-        <p class="desc" data-i18n="set.ttsLimitDesc">同一句话 + 同一声音只生成一次，之后读本地。设为 0 关闭缓存。</p>
+        <p class="desc" data-i18n="set.ttsLimitDesc">同一語句 + 同一口音只生成一次，其後讀取本機快取。設為 0 則關閉快取。</p>
       </div>
       <div class="field">
-        <label data-i18n="set.convLimit">对话保留个数（10–1000）</label>
+        <label data-i18n="set.convLimit">對話保留數量（10–1000）</label>
         <input id="setConvLimit" type="number" min="10" max="1000" step="1"/>
-        <p class="desc" data-i18n="set.convLimitDesc">只保留最近 N 个对话，超出的连记录和录音一起删。改小立即生效。</p>
+        <p class="desc" data-i18n="set.convLimitDesc">只保留最近 N 個對話，超出的部分連同紀錄與錄音一併刪除。調小立即生效。</p>
       </div>
     </div>
 
     <div class="card">
-      <h2 data-i18n="set.storageUsage">存储占用</h2>
-      <div class="stat-row"><span data-i18n="set.usedSpace">本地已用空间</span><b id="statUsage">…</b></div>
-      <div class="stat-row"><span data-i18n="set.convCount">对话个数</span><b id="statConvs">…</b></div>
-      <div class="stat-row"><span data-i18n="set.ttsCount">原声缓存个数</span><b id="statTts">…</b></div>
-      <p class="foot" data-i18n="set.privacy">所有数据和设置只存在你的浏览器里，不会上传。重要数据请用“导出所有对话”“导出设置”备份。</p>
+      <h2 data-i18n="set.storageUsage">儲存空間佔用</h2>
+      <div class="stat-row"><span data-i18n="set.usedSpace">本機已用空間</span><b id="statUsage">…</b></div>
+      <div class="stat-row"><span data-i18n="set.convCount">對話數量</span><b id="statConvs">…</b></div>
+      <div class="stat-row"><span data-i18n="set.ttsCount">原聲快取數量</span><b id="statTts">…</b></div>
+      <p class="foot" data-i18n="set.privacy">所有資料與設定僅儲存於您的瀏覽器中，絕不上傳。重要資料請使用「匯出所有對話」「匯出設定」備份。</p>
     </div>
 
     <div class="card">
-      <h2 data-i18n="set.manage">设置管理</h2>
+      <h2 data-i18n="set.manage">設定管理</h2>
       <div class="btn-row">
-        <button id="exportSettingsBtn" type="button" class="ghost-btn" data-i18n="set.exportSet">导出设置</button>
-        <button id="importSettingsBtn" type="button" class="ghost-btn" data-i18n="set.importSet">导入设置</button>
+        <button id="exportSettingsBtn" type="button" class="ghost-btn" data-i18n="set.exportSet">匯出設定</button>
+        <button id="importSettingsBtn" type="button" class="ghost-btn" data-i18n="set.importSet">匯入設定</button>
         <input id="importSettingsFile" type="file" accept="application/json,.json" class="hidden"/>
       </div>
       <div class="btn-row">
-        <button id="resetSettingsBtn" type="button" class="danger" data-i18n="set.resetSet">还原默认设置</button>
+        <button id="resetSettingsBtn" type="button" class="danger" data-i18n="set.resetSet">還原預設設定</button>
       </div>
     </div>
     <div class="ver"><span data-i18n="set.version">版本</span> v20261009-23 · <a class="ver-link" href="https://github.com/2-3-5-7/SprechMate" target="_blank" rel="noopener">GitHub</a></div>
@@ -836,35 +836,35 @@ function buildDefaultPrompt(learnLang, uiLang) {
       '- Don\'t write English outside quote lines.\n' +
       '- Don\'t put quote lines between ' + target + ' paragraphs.';
   }
-  return '你是一位耐心的' + target + '口语教练，陪伴一位中文母语的' + target + '初学者练习口语。\n' +
-    '规则：\n' +
-    '- 主要用' + target + '和用户对话，话题日常轻松（自我介绍、爱好、天气、食物、旅行等）。\n' +
-    '- ' + target + '要简单：短句为主，生词控制在初学水平。\n' +
-    '- 用户说错时，温和指出错误并给出正确说法，再继续对话。\n' +
-    '- 每条回复末尾加一行中文引用（行首加 "> "）：简短翻译或提示，帮助理解。\n' +
-    '不要做的事：\n' +
-    '- 不要用从句和超纲词汇。\n' +
-    '- 不要一次问多个问题。\n' +
-    '- 不要在引用行之外写中文。\n' +
-    '- 不要把引用行插进' + target + '段落中间。';
+  return '你是一位耐心的' + target + '口語教練，陪伴一位中文母語的' + target + '初學者練習口語。\n' +
+    '規則：\n' +
+    '- 主要用' + target + '與使用者對話，話題圍繞輕鬆日常（自我介紹、興趣、天氣、食物、旅行等）。\n' +
+    '- ' + target + '要簡單：以短句為主，生字控制在初學水平。\n' +
+    '- 使用者說錯時，溫和指出錯誤並提供正確說法，再繼續對話。\n' +
+    '- 每條回覆結尾加上一行中文引用（行首加 "> "）：簡短翻譯或提示，輔助理解。\n' +
+    '請勿：\n' +
+    '- 請勿使用從句與超綱詞彙。\n' +
+    '- 請勿一次提出多個問題。\n' +
+    '- 請勿在引用行之外使用中文。\n' +
+    '- 請勿將引用行插入' + target + '段落中間。';
 }
-/* 内置默认模板的名字（跟随界面语言）：德语口语陪练 / German Speaking Coach */
+/* 內置預設範本的名稱（跟隨介面語言）：英式英語口語陪練 / English (UK) Speaking Coach */
 function defaultPromptName(learnLang, uiLang) {
   const lang = langOf(learnLang);
   const target = uiLang === 'en' ? lang.en : lang.zh;
-  return uiLang === 'en' ? target + ' Speaking Coach' : target + '口语陪练';
+  return uiLang === 'en' ? target + ' Speaking Coach' : target + '口語陪練';
 }
-/* 兼容老版本：之前写死的德语默认提示词（用于识别用户是否改过） */
+/* 相容舊版本：之前寫死的預設提示詞 */
 const DEFAULT_SYSTEM_PROMPT =
-'你是一位耐心的德语口语陪练，陪伴一位中文母语的德语初学者练习口语。\n' +
-'规则：\n' +
-'- 主要用德语和用户对话，话题日常轻松（自我介绍、爱好、天气、食物、旅行等）。\n' +
-'- 你的德语要简单：短句为主，少用从句，生词控制在初学水平。\n' +
-'- 每条回复末尾加一行简体中文：简短翻译或提示，帮助理解。\n' +
-'- 用户德语说错时，用中文温和指出错误并给出正确说法，再继续对话。\n' +
-'- 一次只问一个跟进问题，保持对话流动。';
+'你是一位耐心的口語陪練，陪伴一位中文母語的初學者練習口語。\n' +
+'規則：\n' +
+'- 主要用目標語言與使用者對話，話題圍繞輕鬆日常（自我介紹、興趣、天氣、食物、旅行等）。\n' +
+'- 你的語言要簡單：以短句為主，少用複雜從句，生字控制在初學水平。\n' +
+'- 每條回覆結尾加上一行繁體中文：簡短翻譯或提示，輔助理解。\n' +
+'- 使用者說錯時，以中文溫和指出錯誤並提供正確說法，再繼續對話。\n' +
+'- 一次只提出一個跟進問題，保持對話流暢。';
 
-/* 海关官员模板：中/英两套，{target} 按学习语言替换；译文走引用块约定（> ）做示范 */
+/* 海關官員範本：中/英兩套，{target} 按學習語言替換；譯文遵循引用塊約定（> ）做示範 */
 function buildCustomsPrompt(learnLang, uiLang) {
   const lang = langOf(learnLang);
   const target = uiLang === 'en' ? lang.en : lang.zh;
@@ -879,24 +879,24 @@ function buildCustomsPrompt(learnLang, uiLang) {
       '- Don\'t write English outside quote lines.\n' +
       '- Don\'t put quote lines between ' + target + ' paragraphs.';
   }
-  return '你是一名严格的' + target + '海关官员，正在对我进行入境盘问。\n' +
-    '规则：\n' +
-    '- 全程用' + target + '和我对话，语速正常，不要迁就初学者。\n' +
-    '- 你怀疑我的入境目的：不断追问细节，质疑含糊的回答，发现前后矛盾要当场指出。\n' +
-    '- 我的目标是说服你让我入境；只有当你真正被说服时才放行，然后写一行引用：> 过关。\n' +
-    '- 结束后用中文引用行（每行以 "> " 开头）简要点评：哪些表达地道、哪里出了错。\n' +
-    '不要做的事：\n' +
-    '- 不要在引用行之外写中文。\n' +
-    '- 不要把引用行插进' + target + '段落中间。';
+  return '你是一名嚴格的' + target + '海關官員，正在對我進行入境盤問。\n' +
+    '規則：\n' +
+    '- 全程以' + target + '與我對話，語速正常，不要遷就初學者。\n' +
+    '- 你懷疑我的入境目的：不斷追問細節，質疑含糊的回答，發現前後矛盾要當場指出。\n' +
+    '- 我的目標是說服你讓我入境；只有當你真正被說服時方可放行，然後寫一行引用：> 過關。\n' +
+    '- 結束後以中文引用行（每行以 "> " 開頭）簡要點評：哪些表達地道、哪裏出現錯誤。\n' +
+    '請勿：\n' +
+    '- 請勿在引用行之外使用中文。\n' +
+    '- 請勿將引用行插入' + target + '段落中間。';
 }
 function customsPromptName(learnLang, uiLang) {
   const lang = langOf(learnLang);
   const target = uiLang === 'en' ? lang.en : lang.zh;
-  return uiLang === 'en' ? target + ' Customs Officer (Task)' : target + '海关官员（任务）';
+  return uiLang === 'en' ? target + ' Customs Officer (Task)' : target + '海關官員（任務）';
 }
 
 function ukGpPromptName(uiLang) {
-  return uiLang === 'en' ? 'UK Life: GP & NHS Appointment' : '英国生活：NHS & GP 预约分诊';
+  return uiLang === 'en' ? 'UK Life: GP & NHS Appointment' : '英國生活：NHS & GP 預約分診';
 }
 function buildUKGpPrompt(uiLang) {
   if (uiLang === 'en') {
@@ -913,22 +913,22 @@ function buildUKGpPrompt(uiLang) {
       '- Don\'t write English outside quote lines that is unnatural or oversimplified.\n' +
       '- Don\'t put quote lines between paragraphs.';
   }
-  return '你是一名英国 NHS GP（社区门诊）的前台分诊协调员。\n' +
-    '规则：\n' +
-    '- 全程用纯正英式英语与我对话，语速自然，展现英式职业礼貌。\n' +
-    '- 情景扮演：我早晨 8:00 致电诊所挂号。请向我询问全名、出生日期（DOB）和邮编核对身份。\n' +
-    '- 询问病情详情（"Could you give me a brief idea of what the issue is?"）、持续时间及严重程度。\n' +
-    '- 必须进行红旗症状排查（有无胸痛、呼吸急促或大出血）。\n' +
-    '- 给出真实的 NHS 安排（如当天医生电话回访、下周普通门诊、或建议去 Boots/药剂师咨询）。\n' +
-    '- 使用地道英式词汇：GP surgery, paracetamol, prescription, chemist, triage, 111。\n' +
-    '- 每条回复末尾加一行中文引用（行首加 "> "）：关键句型解析或地道英式表达建议。\n' +
-    '不要做的事：\n' +
-    '- 不要在引用行之外写中文。\n' +
-    '- 不要把引用行插进段落中间。';
+  return '你是一名英國 NHS GP（社區門診）的前台分診協調員。\n' +
+    '規則：\n' +
+    '- 全程使用純正英式英語與我對話，語速自然，展現英式職業禮貌。\n' +
+    '- 情景扮演：我於早晨 8:00 致電診所掛號。請向我詢問全名、出生日期（DOB）及郵遞區號（Postcode）核對身份。\n' +
+    '- 詢問病情詳情（"Could you give me a brief idea of what the issue is?"）、持續時間及嚴重程度。\n' +
+    '- 必須進行紅旗症狀排查（有否胸痛、呼吸急促或嚴重出血）。\n' +
+    '- 提供真實的 NHS 安排（如當天醫生電話回診、下週常規門診、或建議前往 Boots／藥劑師諮詢）。\n' +
+    '- 使用地道英式詞彙：GP surgery, paracetamol, prescription, chemist, triage, 111。\n' +
+    '- 每條回覆結尾加上一行中文引用（行首加 "> "）：關鍵句型解析或地道英式表達建議。\n' +
+    '請勿：\n' +
+    '- 請勿在引用行之外使用中文。\n' +
+    '- 請勿將引用行插入段落中間。';
 }
 
 function ukCouncilPromptName(uiLang) {
-  return uiLang === 'en' ? 'UK Life: Council Tax & Waste' : '英国生活：市政税与垃圾回收';
+  return uiLang === 'en' ? 'UK Life: Council Tax & Waste' : '英國生活：市政稅與垃圾回收';
 }
 function buildUKCouncilPrompt(uiLang) {
   if (uiLang === 'en') {
@@ -943,20 +943,20 @@ function buildUKCouncilPrompt(uiLang) {
       '- Don\'t write English outside quote lines.\n' +
       '- Don\'t put quote lines between paragraphs.';
   }
-  return '你是英国地方市政厅（Local Council）的市政服务专员。\n' +
-    '规则：\n' +
-    '- 全程用规范英式英语与我对话，语气官方且礼貌。\n' +
-    '- 处理居民关于市政税（Council Tax 单人 25% 折扣、学生免税、搬家登记）或垃圾桶遗漏回收（轮式垃圾桶 wheelie bin、回收蓝桶、绿桶）的申诉与咨询。\n' +
-    '- 核对邮编（Postcode）、住址与市政税账单编号。\n' +
-    '- 使用英国市政地道词汇：Council Tax band, electoral roll, direct debit, collection day。\n' +
-    '- 每条回复末尾加一行中文引用（行首加 "> "）：解释英国市政常识与高频公文句式。\n' +
-    '不要做的事：\n' +
-    '- 不要在引用行之外写中文。\n' +
-    '- 不要把引用行插进段落中间。';
+  return '你是英國地方市政廳（Local Council）的市政服務專員。\n' +
+    '規則：\n' +
+    '- 全程使用規範英式英語與我對話，語氣官方且禮貌。\n' +
+    '- 處理居民關於市政稅（Council Tax 單人 25% 折扣、學生免稅、搬遷登記）或垃圾桶遺漏收集（輪式垃圾桶 wheelie bin、回收藍桶、綠桶）的申訴與查詢。\n' +
+    '- 核對郵遞區號（Postcode）、住址與市政稅帳單編號。\n' +
+    '- 使用英國市政地道詞彙：Council Tax band, electoral roll, direct debit, collection day。\n' +
+    '- 每條回覆結尾加上一行中文引用（行首加 "> "）：解釋英國市政常識與高頻公文句式。\n' +
+    '請勿：\n' +
+    '- 請勿在引用行之外使用中文。\n' +
+    '- 請勿將引用行插入段落中間。';
 }
 
 function ukTenancyPromptName(uiLang) {
-  return uiLang === 'en' ? 'UK Life: Tenancy & Repairs' : '英国生活：租房维修与中介交涉';
+  return uiLang === 'en' ? 'UK Life: Tenancy & Repairs' : '英國生活：租屋維修與地產代理交涉';
 }
 function buildUKTenancyPrompt(uiLang) {
   if (uiLang === 'en') {
@@ -971,20 +971,20 @@ function buildUKTenancyPrompt(uiLang) {
       '- Don\'t write English outside quote lines.\n' +
       '- Don\'t put quote lines between paragraphs.';
   }
-  return '你是一名英国房产中介（Letting Agent）或房东，正在处理租客的紧急报修。\n' +
-    '规则：\n' +
-    '- 全程用自然英式英语交流，展现英国中介典型的“客气但推托”现实风格。\n' +
-    '- 情景扮演：我向你报告紧急维修（如冬天锅炉 combi-boiler 故障无暖气热水，或房间严重黑发霉潮湿 damp & mould）。\n' +
-    '- 模拟真实互动：先尝试建议租客自查（如“看水压表是否低于 1 bar”、“开窗通风”）或表示工程排期满，迫使租客引用法律义务（Section 11）坚定交涉。\n' +
-    '- 使用地道租房术语：combi-boiler, damp & mould, DPS, inventory report, contractor, emergency call-out。\n' +
-    '- 每条回复末尾加一行中文引用（行首加 "> "）：提示如何用委婉而坚定（Assertive）的英式英语维权。\n' +
-    '不要做的事：\n' +
-    '- 不要在引用行之外写中文。\n' +
-    '- 不要把引用行插进段落中间。';
+  return '你是一名英國地產代理（Letting Agent）或業主，正在處理租客的緊急報修。\n' +
+    '規則：\n' +
+    '- 全程使用自然英式英語交流，展現英國代理典型的「客氣但推搪」現實風格。\n' +
+    '- 情景扮演：我向你報告緊急維修（如冬天鍋爐 combi-boiler 故障導致沒有暖氣及熱水，或房間出現嚴重黑霉潮濕 damp & mould）。\n' +
+    '- 模擬真實互動：先嘗試建議租客自行檢查（如「檢查水壓表是否低於 1 bar」、「開窗通風」）或表示師傅檔期已滿，促使租客引用法定維修責任（Section 11）堅定交涉。\n' +
+    '- 使用地道租屋術語：combi-boiler, damp & mould, DPS, inventory report, contractor, emergency call-out。\n' +
+    '- 每條回覆結尾加上一行中文引用（行首加 "> "）：提示如何以委婉而堅定（Assertive）的英式英語維護權益。\n' +
+    '請勿：\n' +
+    '- 請勿在引用行之外使用中文。\n' +
+    '- 請勿將引用行插入段落中間。';
 }
 
 function ukBanterPromptName(uiLang) {
-  return uiLang === 'en' ? 'UK Life: Small Talk & Pub Banter' : '英国生活：英式寒暄与 Pub 社交';
+  return uiLang === 'en' ? 'UK Life: Small Talk & Pub Banter' : '英國生活：英倫寒暄與 Pub 社交';
 }
 function buildUKBanterPrompt(uiLang) {
   if (uiLang === 'en') {
@@ -999,20 +999,20 @@ function buildUKBanterPrompt(uiLang) {
       '- Don\'t write English outside quote lines.\n' +
       '- Don\'t put quote lines between paragraphs.';
   }
-  return '你是一位友善的英国本地邻居或酒吧熟客（Pub Regular）。\n' +
-    '规则：\n' +
-    '- 全程使用地道日常口语英音交流，语气轻松幽默，极具英伦生活感。\n' +
-    '- 话题围绕：英国天气（吐槽阴雨或惊叹晴天）、周末闲聊（"Any plans for the weekend?"）、酒吧吧台点酒点零食（"What can I get you?", "A pint of cider", "My round"）。\n' +
-    '- 自然融入高频英式俚语口头禅：Alright?, Fancy a cuppa?, No worries, Spot on, Knackered, Gutted, Cheers mate, Pop in。\n' +
-    '- 体现英式幽默与自嘲（Banter）。\n' +
-    '- 每条回复末尾加一行中文引用（行首加 "> "）：解释俚语出处与英国酒吧/社交潜规则。\n' +
-    '不要做的事：\n' +
-    '- 不要在引用行之外写中文。\n' +
-    '- 不要把引用行插进段落中间。';
+  return '你是一位友善的英國本地鄰居或酒吧常客（Pub Regular）。\n' +
+    '規則：\n' +
+    '- 全程使用地道日常口語英音交流，語氣輕鬆幽默，極富英倫生活感。\n' +
+    '- 話題圍繞：英國天氣（吐嘈陰雨或讚嘆晴天）、週末閒聊（"Any plans for the weekend?"）、酒吧吧台點酒點小食（"What can I get you?", "A pint of cider", "My round"）。\n' +
+    '- 自然融入高頻英式俚語口頭禪：Alright?, Fancy a cuppa?, No worries, Spot on, Knackered, Gutted, Cheers mate, Pop in。\n' +
+    '- 體現英式幽默與自嘲（Banter）。\n' +
+    '- 每條回覆結尾加上一行中文引用（行首加 "> "）：解釋俚語出處與英國酒吧／社交潛規則。\n' +
+    '請勿：\n' +
+    '- 請勿在引用行之外使用中文。\n' +
+    '- 請勿將引用行插入段落中間。';
 }
 
 function ukReadingPromptName(uiLang) {
-  return uiLang === 'en' ? 'UK Life: News & GOV.UK Reading Explainer' : '英国生活：新闻与官方法规阅读助教';
+  return uiLang === 'en' ? 'UK Life: News & GOV.UK Reading Explainer' : '英國生活：新聞與官方法規閱讀助教';
 }
 function buildUKReadingPrompt(uiLang) {
   if (uiLang === 'en') {
@@ -1028,17 +1028,17 @@ function buildUKReadingPrompt(uiLang) {
       'Don\'t:\n' +
       '- Don\'t make explanations overly academic; focus on practical reading comprehension.';
   }
-  return '你是一位精通英国新闻社论、政府公文与长篇深度阅读的英文助教。\n' +
-    '规则：\n' +
-    '- 用户会直接粘贴 BBC News、The Guardian、GOV.UK 政策法规或复杂账单/合同句子。\n' +
-    '- 你的回复结构：\n' +
-    '  1. 【极简重述 (Plain English)】：用清晰易懂的现代英语重述核心意思。\n' +
-    '  2. 【在地概念与生词拆解】：剖析英国特有政治/法律/社会概念（如 Chancellor, Autumn Statement, NHS Trust, Council Tax band）。\n' +
-    '  3. 【长难句结构点拨】：拆解倒装、虚拟、多重从句或委婉被动句。\n' +
-    '  4. 【实用造句】：给出 2 个英国人日常生活中使用该核心短语的例句。\n' +
-    '- 在回复末尾用中文引用行（以 "> " 开头）提供精炼译文与速记要点。\n' +
-    '不要做的事：\n' +
-    '- 不要做冗长无用的死记硬背解释，注重语感与实际理解。';
+  return '你是一位精通英國新聞社論、政府公文與長篇深度閱讀的英文助教。\n' +
+    '規則：\n' +
+    '- 使用者會直接貼上 BBC News、The Guardian、GOV.UK 政策法規或複雜帳單／合約語句。\n' +
+    '- 你的回覆結構：\n' +
+    '  1. 【極簡重述 (Plain English)】：以清晰易懂的現代英語重述核心意思。\n' +
+    '  2. 【在地概念與生字拆解】：剖析英國特有政治／法律／社會概念（如 Chancellor, Autumn Statement, NHS Trust, Council Tax band）。\n' +
+    '  3. 【長難句結構點撥】：拆解倒裝、虛擬、多重從句或委婉被動句。\n' +
+    '  4. 【實用造句】：提供 2 個英國人日常生活中使用該核心短語的例句。\n' +
+    '- 在回覆結尾以中文引用行（以 "> " 開頭）提供精煉譯文與速記要點。\n' +
+    '請勿：\n' +
+    '- 請勿進行冗長無效的死記硬背解釋，注重語感與實際理解。';
 }
 
 function getUKTemplates(uiLang) {
@@ -1076,79 +1076,79 @@ const DEFAULTS = {
 };
 
 const REGIONS = [
-  ['westus2', '美国西部 2', 'West US 2'],
-  ['southeastasia', '东南亚（新加坡）', 'Southeast Asia, Singapore'],
-  ['eastasia', '东亚（香港）', 'East Asia, Hong Kong'],
-  ['japaneast', '日本东', 'Japan East'],
-  ['japanwest', '日本西', 'Japan West'],
-  ['koreacentral', '韩国中部', 'Korea Central'],
+  ['westus2', '美國西部 2', 'West US 2'],
+  ['southeastasia', '東南亞（新加坡）', 'Southeast Asia, Singapore'],
+  ['eastasia', '東亞（香港）', 'East Asia, Hong Kong'],
+  ['japaneast', '日本東部', 'Japan East'],
+  ['japanwest', '日本西部', 'Japan West'],
+  ['koreacentral', '南韓中部', 'Korea Central'],
   ['centralindia', '印度中部', 'Central India'],
-  ['australiaeast', '澳大利亚东', 'Australia East'],
-  ['westeurope', '西欧', 'West Europe'],
-  ['northeurope', '北欧', 'North Europe'],
-  ['francecentral', '法国中部', 'France Central'],
-  ['germanywestcentral', '德国西部中心', 'Germany West Central'],
-  ['italynorth', '意大利北', 'Italy North'],
-  ['norwayeast', '挪威东', 'Norway East'],
+  ['australiaeast', '澳洲東部', 'Australia East'],
+  ['westeurope', '西歐', 'West Europe'],
+  ['northeurope', '北歐', 'North Europe'],
+  ['francecentral', '法國中部', 'France Central'],
+  ['germanywestcentral', '德國西部中心', 'Germany West Central'],
+  ['italynorth', '意大利北部', 'Italy North'],
+  ['norwayeast', '挪威東部', 'Norway East'],
   ['swedencentral', '瑞典中部', 'Sweden Central'],
-  ['switzerlandnorth', '瑞士北', 'Switzerland North'],
-  ['switzerlandwest', '瑞士西', 'Switzerland West'],
-  ['uksouth', '英国南', 'UK South'],
-  ['ukwest', '英国西', 'UK West'],
-  ['uaenorth', '阿联酋北', 'UAE North'],
-  ['qatarcentral', '卡塔尔中部', 'Qatar Central'],
-  ['southafricanorth', '南非北', 'South Africa North'],
-  ['brazilsouth', '巴西南', 'Brazil South'],
+  ['switzerlandnorth', '瑞士北部', 'Switzerland North'],
+  ['switzerlandwest', '瑞士西部', 'Switzerland West'],
+  ['uksouth', '英國南部', 'UK South'],
+  ['ukwest', '英國西部', 'UK West'],
+  ['uaenorth', '阿聯酋北部', 'UAE North'],
+  ['qatarcentral', '卡塔爾中部', 'Qatar Central'],
+  ['southafricanorth', '南非北部', 'South Africa North'],
+  ['brazilsouth', '巴西南部', 'Brazil South'],
   ['canadacentral', '加拿大中部', 'Canada Central'],
-  ['canadaeast', '加拿大东部', 'Canada East'],
-  ['eastus', '美国东部', 'East US'],
-  ['eastus2', '美国东部 2', 'East US 2'],
-  ['westus', '美国西部', 'West US'],
-  ['westus3', '美国西部 3', 'West US 3'],
-  ['centralus', '美国中部', 'Central US'],
-  ['northcentralus', '美国中北部', 'North Central US'],
-  ['southcentralus', '美国中南部', 'South Central US'],
-  ['westcentralus', '美国中西部', 'West Central US']
+  ['canadaeast', '加拿大東部', 'Canada East'],
+  ['eastus', '美國東部', 'East US'],
+  ['eastus2', '美國東部 2', 'East US 2'],
+  ['westus', '美國西部', 'West US'],
+  ['westus3', '美國西部 3', 'West US 3'],
+  ['centralus', '美國中部', 'Central US'],
+  ['northcentralus', '美國中北部', 'North Central US'],
+  ['southcentralus', '美國中南部', 'South Central US'],
+  ['westcentralus', '美國中西部', 'West Central US']
 ];
 
 /* 学习语言注册表：微软发音评估 GA 支持的 33 种语言去重后 23 种，德语第一、英语第二，其余按常见度排序 */
 const LANGS = [
-  { code: 'en-GB', locale: 'en-GB', zh: '英式英语', en: 'English (UK)' },
-  { code: 'en', locale: 'en-US', zh: '美式英语', en: 'English (US)' },
-  { code: 'de', locale: 'de-DE', zh: '德语', en: 'German' },
-  { code: 'ja', locale: 'ja-JP', zh: '日语', en: 'Japanese' },
-  { code: 'fr', locale: 'fr-FR', zh: '法语', en: 'French' },
-  { code: 'es', locale: 'es-ES', zh: '西班牙语', en: 'Spanish' },
-  { code: 'ko', locale: 'ko-KR', zh: '韩语', en: 'Korean' },
-  { code: 'it', locale: 'it-IT', zh: '意大利语', en: 'Italian' },
-  { code: 'ru', locale: 'ru-RU', zh: '俄语', en: 'Russian' },
-  { code: 'pt', locale: 'pt-BR', zh: '葡萄牙语', en: 'Portuguese' },
-  { code: 'ar', locale: 'ar-SA', zh: '阿拉伯语', en: 'Arabic' },
-  { code: 'th', locale: 'th-TH', zh: '泰语', en: 'Thai' },
-  { code: 'vi', locale: 'vi-VN', zh: '越南语', en: 'Vietnamese' },
-  { code: 'nl', locale: 'nl-NL', zh: '荷兰语', en: 'Dutch' },
-  { code: 'pl', locale: 'pl-PL', zh: '波兰语', en: 'Polish' },
-  { code: 'sv', locale: 'sv-SE', zh: '瑞典语', en: 'Swedish' },
-  { code: 'da', locale: 'da-DK', zh: '丹麦语', en: 'Danish' },
-  { code: 'fi', locale: 'fi-FI', zh: '芬兰语', en: 'Finnish' },
-  { code: 'no', locale: 'nb-NO', zh: '挪威语', en: 'Norwegian' },
-  { code: 'hi', locale: 'hi-IN', zh: '印地语', en: 'Hindi' },
-  { code: 'ms', locale: 'ms-MY', zh: '马来语', en: 'Malay' },
-  { code: 'ta', locale: 'ta-IN', zh: '泰米尔语', en: 'Tamil' },
-  { code: 'ca', locale: 'ca-ES', zh: '加泰罗尼亚语', en: 'Catalan' },
-  { code: 'zh', locale: 'zh-CN', zh: '中文', en: 'Chinese' }
+  { code: 'en-GB', locale: 'en-GB', zh: '英式英語', en: 'English (UK)' },
+  { code: 'en', locale: 'en-US', zh: '美式英語', en: 'English (US)' },
+  { code: 'de', locale: 'de-DE', zh: '德語', en: 'German' },
+  { code: 'ja', locale: 'ja-JP', zh: '日語', en: 'Japanese' },
+  { code: 'fr', locale: 'fr-FR', zh: '法語', en: 'French' },
+  { code: 'es', locale: 'es-ES', zh: '西班牙語', en: 'Spanish' },
+  { code: 'ko', locale: 'ko-KR', zh: '韓語', en: 'Korean' },
+  { code: 'it', locale: 'it-IT', zh: '意大利語', en: 'Italian' },
+  { code: 'ru', locale: 'ru-RU', zh: '俄語', en: 'Russian' },
+  { code: 'pt', locale: 'pt-BR', zh: '葡萄牙語', en: 'Portuguese' },
+  { code: 'ar', locale: 'ar-SA', zh: '阿拉伯語', en: 'Arabic' },
+  { code: 'th', locale: 'th-TH', zh: '泰語', en: 'Thai' },
+  { code: 'vi', locale: 'vi-VN', zh: '越南語', en: 'Vietnamese' },
+  { code: 'nl', locale: 'nl-NL', zh: '荷蘭語', en: 'Dutch' },
+  { code: 'pl', locale: 'pl-PL', zh: '波蘭語', en: 'Polish' },
+  { code: 'sv', locale: 'sv-SE', zh: '瑞典語', en: 'Swedish' },
+  { code: 'da', locale: 'da-DK', zh: '丹麥語', en: 'Danish' },
+  { code: 'fi', locale: 'fi-FI', zh: '芬蘭語', en: 'Finnish' },
+  { code: 'no', locale: 'nb-NO', zh: '挪威語', en: 'Norwegian' },
+  { code: 'hi', locale: 'hi-IN', zh: '印地語', en: 'Hindi' },
+  { code: 'ms', locale: 'ms-MY', zh: '馬來語', en: 'Malay' },
+  { code: 'ta', locale: 'ta-IN', zh: '泰米爾語', en: 'Tamil' },
+  { code: 'ca', locale: 'ca-ES', zh: '加泰羅尼亞語', en: 'Catalan' },
+  { code: 'zh', locale: 'zh-HK', zh: '繁體中文', en: 'Chinese' }
 ];
 function langOf(code) { return LANGS.find(l => l.code === code) || LANGS[0]; }
 
 /* 内置声音列表（手动维护；微软改声音时再更新，不调 voices/list 实时接口）：[ShortName, 显示名, 性别] */
 const VOICES = {
   'en-GB': [
-    ['en-GB-SoniaNeural', 'Sonia (女声·标准)', 'f'],
-    ['en-GB-RyanNeural', 'Ryan (男声·口语)', 'm'],
-    ['en-GB-LibbyNeural', 'Libby (女声·干练)', 'f'],
-    ['en-GB-ThomasNeural', 'Thomas (男声·沉稳)', 'm'],
-    ['en-GB-MaisieNeural', 'Maisie (女声·亲和)', 'f'],
-    ['en-GB-AlfieNeural', 'Alfie (男声·青年)', 'm']
+    ['en-GB-SoniaNeural', 'Sonia (女聲·標準)', 'f'],
+    ['en-GB-RyanNeural', 'Ryan (男聲·口語)', 'm'],
+    ['en-GB-LibbyNeural', 'Libby (女聲·幹練)', 'f'],
+    ['en-GB-ThomasNeural', 'Thomas (男聲·沉穩)', 'm'],
+    ['en-GB-MaisieNeural', 'Maisie (女聲·親和)', 'f'],
+    ['en-GB-AlfieNeural', 'Alfie (男聲·青年)', 'm']
   ],
   en: [['en-US-AvaNeural', 'Ava', 'f'], ['en-US-AndrewNeural', 'Andrew', 'm'], ['en-US-EmmaNeural', 'Emma', 'f'], ['en-US-BrianNeural', 'Brian', 'm'], ['en-US-JennyNeural', 'Jenny', 'f'], ['en-US-GuyNeural', 'Guy', 'm']],
   de: [['de-DE-KatjaNeural', 'Katja', 'f'], ['de-DE-ConradNeural', 'Conrad', 'm'], ['de-DE-AmalaNeural', 'Amala', 'f'], ['de-DE-KillianNeural', 'Killian', 'm'], ['de-DE-GiselaNeural', 'Gisela', 'f'], ['de-DE-KlausNeural', 'Klaus', 'm']],
@@ -1178,274 +1178,274 @@ const VOICES = {
 /* ================= i18n：界面中英双语 ================= */
 const STR = {
 zh: {
-  'app.title': '芯语伴 SprechMate',
-  'app.name': '芯语伴',
-  'app.tagline': '聊天 → 点句听原声 → 录音纠音',
-  'nav.settings': '设置',
+  'app.title': 'SprechMate UK 英國英音私教',
+  'app.name': 'SprechMate UK',
+  'app.tagline': '聊天 → 點句聽原聲 → 錄音糾音',
+  'nav.settings': '設定',
   'nav.back': '返回',
-  'drawer.title': '对话列表',
-  'drawer.searchPh': '搜索对话',
-  'drawer.exportAll': '导出所有对话',
-  'drawer.del10': '删除 10 天前的对话',
-  'drawer.del30': '删除 30 天前的对话',
-  'drawer.delAll': '删除所有对话',
-  'drawer.empty': '暂无对话',
-  'drawer.noMatch': '没有匹配的对话',
-  'drawer.delTitle': '删除',
-  'drawer.exportTitle': '导出为 Markdown',
-  'drawer.delOneConfirm': '确定删除这个对话吗？相关的练习记录和音频也会一并清除。',
-  'drawer.delAllConfirm': '确定删除所有对话吗？相关的练习记录和音频也会一并清除。',
-  'drawer.delOldConfirm': '确定删除 {n} 个 {days} 天前的对话吗？相关的练习记录和录音也会一并清除，删了找不回来。',
-  'drawer.delOldNone': '没有 {days} 天前的对话',
-  'guide.title': '还没配置聊天接口',
-  'guide.desc': '点右上角齿轮，填好 Base URL、模型和 Key 就能开始聊天。',
-  'guide.go': '去设置',
-  'chat.new': '＋ 新对话',
-  'chat.promptTitle': '当前对话使用的提示词模板',
-  'chat.inputPh': '用{lang}说点什么…（回车发送，Shift+回车换行）',
+  'drawer.title': '對話清單',
+  'drawer.searchPh': '搜尋對話',
+  'drawer.exportAll': '匯出所有對話',
+  'drawer.del10': '刪除 10 天前的對話',
+  'drawer.del30': '刪除 30 天前的對話',
+  'drawer.delAll': '刪除所有對話',
+  'drawer.empty': '暫無對話',
+  'drawer.noMatch': '沒有相符的對話',
+  'drawer.delTitle': '刪除',
+  'drawer.exportTitle': '匯出為 Markdown',
+  'drawer.delOneConfirm': '確定刪除這個對話嗎？相關的練習紀錄與音訊亦會一併清除。',
+  'drawer.delAllConfirm': '確定刪除所有對話嗎？相關的練習紀錄與音訊亦會一併清除。',
+  'drawer.delOldConfirm': '確定刪除 {n} 個 {days} 天前的對話嗎？相關的練習紀錄與錄音亦會一併清除，刪除後無法還原。',
+  'drawer.delOldNone': '沒有 {days} 天前的對話',
+  'guide.title': '尚未設定對話 API 介面',
+  'guide.desc': '點擊右上角齒輪，填妥 Base URL、模型與 Key 即可開始對話。',
+  'guide.go': '前往設定',
+  'chat.new': '＋ 新對話',
+  'chat.promptTitle': '目前對話使用的提示詞範本',
+  'chat.inputPh': '用{lang}說點甚麼…（Enter 發送，Shift+Enter 換行）',
   'chat.clear': '清空',
   'chat.clearTitle': '清空 (Alt+A)',
-  'chat.dict': '语音输入',
-  'chat.dictStop': '停止语音输入',
-  'chat.dictTitle': '语音输入 (Alt+S)',
-  'chat.emptyHint': '还没有对话，在下面用{lang}和 AI 聊起来吧。',
-  'chat.sendFail': '发送失败：{msg}',
-  'chat.retry': '↻ 重试',
-  'chat.clickAudio': '点击生成这句的原声',
-  'chat.editSave': '保存',
+  'chat.dict': '語音輸入',
+  'chat.dictStop': '停止語音輸入',
+  'chat.dictTitle': '語音輸入 (Alt+S)',
+  'chat.emptyHint': '尚未有對話，請在下方用{lang}與 AI 開始聊天吧。',
+  'chat.sendFail': '發送失敗：{msg}',
+  'chat.retry': '↻ 重試',
+  'chat.clickAudio': '點擊產生此句的原聲',
+  'chat.editSave': '儲存',
   'chat.editCancel': '取消',
-  'chat.editEmpty': '内容不能为空',
-  'chat.noKey': '请先点右上角齿轮，填写聊天接口的 Base URL、模型和 Key',
-  'chat.testAsk': '请只回复 OK',
-  'chat.testOk': '连接成功',
-  'chat.testOkReply': '连接成功，模型回复：{reply}',
-  'chat.testFail': '失败：{msg}',
-  'chat.testing': '测试中…',
-  'chat.netErr': '网络错误',
-  'chat.reqFail': '请求失败',
-  'chat.emptyResp': '接口返回为空',
-  'sent.title': '{lang}跟读',
-  'sent.ph': '点击上方对话中的一句话，这里会自动填入',
-  'sent.gen': '生成原声',
-  'sent.dl': '下载原声',
+  'chat.editEmpty': '內容不可為空',
+  'chat.noKey': '請先點擊右上角齒輪，填寫對話介面 API 的 Base URL、模型與 Key',
+  'chat.testAsk': '請只回覆 OK',
+  'chat.testOk': '連線成功',
+  'chat.testOkReply': '連線成功，模型回覆：{reply}',
+  'chat.testFail': '失敗：{msg}',
+  'chat.testing': '測試中…',
+  'chat.netErr': '網絡錯誤',
+  'chat.reqFail': '請求失敗',
+  'chat.emptyResp': '介面返回為空',
+  'sent.title': '{lang}跟讀',
+  'sent.ph': '點擊上方對話中的一句話，此處會自動填入',
+  'sent.gen': '生成原聲',
+  'sent.dl': '下載原聲',
   'sent.play': '播放',
-  'sent.pause': '暂停',
-  'sent.playTitle': '播放原声 (S)',
-  'sent.genFail': '原声生成失败',
-  'err.network': '网络好像不通，检查一下网络或 VPN 再试一次',
-  'err.timeout': '请求超时了，网络有点慢，再试一次吧',
-  'err.badKey': 'Azure Key 或 Region 可能不对，去设置里检查一下',
-  'err.quota': 'Azure 配额用完了（免费额度按月重置）',
-  'err.internal': '出了点小问题，再试一次；如果一直这样请反馈',
-  'err.unknown': '生成失败，再试一次吧',
-  'sent.langMismatchTitle': '语言不匹配',
-  'sent.langMismatchMsg': '这段文本看起来是{tl}，但当前学习语言是{cl}。去设置里切换学习语言后再生成？',
-  'sent.goSettings': '去设置',
-  'sent.dlFail': '下载失败',
-  'sent.noKey': '请先点右上角齿轮，填写 Azure Speech Key 和 Region',
-  'sent.noText': '没有可朗读的文本',
-  'sent.ttsFail': 'TTS 失败（{status}）：{msg}',
-  'sent.emptyBox': '文本框是空的，点击对话中的一句话可自动填入',
+  'sent.pause': '暫停',
+  'sent.playTitle': '播放原聲 (S)',
+  'sent.genFail': '原聲生成失敗',
+  'err.network': '網絡連線不通，請檢查網絡或 VPN 後再試一次',
+  'err.timeout': '請求逾時，網絡較慢，請再試一次',
+  'err.badKey': 'Azure Key 或 Region 可能不正確，請前往設定檢查',
+  'err.quota': 'Azure 配額已耗盡（免費額度按月重設）',
+  'err.internal': '系統出現問題，請再試一次；如持續出現請反饋',
+  'err.unknown': '生成失敗，請再試一次',
+  'sent.langMismatchTitle': '語言不符',
+  'sent.langMismatchMsg': '此段文字看似是{tl}，但目前學習語言為{cl}。是否前往設定切換學習語言後再生成？',
+  'sent.goSettings': '前往設定',
+  'sent.dlFail': '下載失敗',
+  'sent.noKey': '請先點擊右上角齒輪，填寫 Azure Speech Key 與 Region',
+  'sent.noText': '沒有可朗讀的文本',
+  'sent.ttsFail': 'TTS 失敗（{status}）：{msg}',
+  'sent.emptyBox': '文字方塊為空，點擊對話中的一句話可自動填入',
   'sent.synthesizing': '合成中…',
-  'sent.ttsOk': 'TTS 正常，已播放测试语音',
-  'sent.playFail': '播放失败',
-  'rec.title': '录音打分',
-  'rec.start': '开始录音',
-  'rec.startTitle': '开始录音 (D)',
+  'sent.ttsOk': 'TTS 正常，已播放測試語音',
+  'sent.playFail': '播放失敗',
+  'rec.title': '錄音評分',
+  'rec.start': '開始錄音',
+  'rec.startTitle': '開始錄音 (D)',
   'rec.stop': '■ 停止',
-  'rec.scoring': '打分中…',
-  'rec.preparing': '准备中…',
-  'rec.phase': '录音中 {time}',
-  'rec.phaseScoring': '正在打分，请稍候…',
-  'rec.playTitle': '播放我的录音 (F)',
-  'rec.history': '练习历史（本对话）',
-  'rec.noHistory': '暂无练习记录',
-  'rec.noText': '请先点击对话中的一句话，或在文本框输入要练习的{lang}句子',
-  'rec.noKey': '请先点右上角齿轮，填写 Azure Speech Key 和 Region',
-  'rec.noAudio': '没有录到声音，请检查麦克风后重试',
-  'rec.autoSilence': '连续 10 秒没有检测到说话声，已自动停止',
-  'rec.auto30': '录音达到 30 秒，已自动停止（微软发音评估仅支持 30 秒内音频）',
-  'rec.cantStart': '无法开始录音',
-  'rec.scoreFail': '打分失败',
-  'rec.timeout': '打分请求超时，请检查网络后重试',
-  'rec.netFail': '网络连接失败，请检查网络后重试',
-  'rec.badKey': 'Azure Key 或 Region 不正确，请点右上角齿轮检查',
-  'rec.quota': '请求太频繁或配额用完，稍后再试',
-  'rec.serverErr': '打分服务异常（{status}{msg}）',
-  'rec.badResponse': '打分服务返回异常，请重试',
-  'rec.noSpeech': '没有识别到语音，请靠近麦克风、完整读一遍再试',
-  'rec.noResult': '打分服务没有返回结果，请重试',
-  'rec.noAssess': '打分服务未返回发音评估（只返回了转写），请重试',
-  'rec.retryKept': '{msg}。你的录音已保留，网络恢复后可直接重新打分，无需重录。',
-  'rec.retry': '重新打分',
-  'rec.accuracy': '准确度',
+  'rec.scoring': '評分中…',
+  'rec.preparing': '準備中…',
+  'rec.phase': '錄音中 {time}',
+  'rec.phaseScoring': '正在評分，請稍候…',
+  'rec.playTitle': '播放我的錄音 (F)',
+  'rec.history': '練習紀錄（本對話）',
+  'rec.noHistory': '暫無練習紀錄',
+  'rec.noText': '請先點擊對話中的一句話，或在文字方塊輸入要練習的{lang}語句',
+  'rec.noKey': '請先點擊右上角齒輪，填寫 Azure Speech Key 與 Region',
+  'rec.noAudio': '未錄取任何聲音，請檢查麥克風後重試',
+  'rec.autoSilence': '連續 10 秒未偵測到說話聲，已自動停止',
+  'rec.auto30': '錄音達 30 秒，已自動停止（微軟發音評估僅支援 30 秒內音訊）',
+  'rec.cantStart': '無法開始錄音',
+  'rec.scoreFail': '評分失敗',
+  'rec.timeout': '評分請求逾時，請檢查網絡後重試',
+  'rec.netFail': '網絡連線失敗，請檢查網絡後重試',
+  'rec.badKey': 'Azure Key 或 Region 不正確，請點擊右上角齒輪檢查',
+  'rec.quota': '請求過於頻繁或配額已耗盡，請稍後再試',
+  'rec.serverErr': '評分服務異常（{status}{msg}）',
+  'rec.badResponse': '評分服務返回異常，請重試',
+  'rec.noSpeech': '未識別到語音，請靠近麥克風、完整朗讀一遍再試',
+  'rec.noResult': '評分服務未返回結果，請重試',
+  'rec.noAssess': '評分服務未返回發音評估（僅返回轉寫文本），請重試',
+  'rec.retryKept': '{msg}。您的錄音已妥善保留，網絡恢復後可直接重新評分，毋須重錄。',
+  'rec.retry': '重新評分',
+  'rec.accuracy': '準確度',
   'rec.fluency': '流利度',
   'rec.completeness': '完整度',
-  'rec.prosody': '韵律',
-  'rec.heard': '系统听到：{text}',
-  'rec.heardNone': '（无）',
-  'rec.noWordDetail': '无单词明细',
-  'rec.noPhDetail': '无音素明细',
-  'rec.wordHint': '点单词看音素得分{phNote}。单词：红=读错，灰=漏读，橙=多读。',
-  'rec.phNoteEst': '（音标为估算值）',
-  'rec.phNoteReal': '（真实音标）',
-  'rec.phEstTitle': '按{lang}发音规则估算',
-  'rec.heardAs': '读成{sym}',
-  'dict.noSupport': '当前浏览器不支持语音输入，可以用 Gboard 的语音输入代替',
-  'dict.noPerm': '麦克风权限被拒绝，请在浏览器设置里允许后重试',
-  'dict.noMic': '没有找到麦克风',
-  'dict.netNeeded': '语音识别需要联网，请检查网络后重试',
-  'set.usage': '用量统计',
+  'rec.prosody': '韻律',
+  'rec.heard': '系統識別：{text}',
+  'rec.heardNone': '（無）',
+  'rec.noWordDetail': '無單字明細',
+  'rec.noPhDetail': '無音素明細',
+  'rec.wordHint': '點擊單字查看音素得分{phNote}。單字：紅=讀錯，灰=漏讀，橙=多讀。',
+  'rec.phNoteEst': '（音標為估算值）',
+  'rec.phNoteReal': '（真實音標）',
+  'rec.phEstTitle': '按{lang}發音規則估算',
+  'rec.heardAs': '讀作{sym}',
+  'dict.noSupport': '目前瀏覽器不支援語音輸入，可使用系統或輸入法的語音輸入替代',
+  'dict.noPerm': '麥克風權限被拒絕，請在瀏覽器設定中允許後重試',
+  'dict.noMic': '找不到麥克風設備',
+  'dict.netNeeded': '語音辨識需要聯網，請檢查網絡後重試',
+  'set.usage': '用量統計',
   'set.todayCheckin': '今日打卡',
-  'set.dayChat': '对话',
-  'set.dayTts': '听原声',
-  'set.dayAssess': '录音练习',
-  'set.dayCost': '花费',
-  'set.ttsQuota': '原声生成（本月）',
-  'set.assessQuota': '发音评估（本月）',
-  'set.chars': '{used} / {quota} 字符',
-  'set.minutes': '{used} / 300 分钟',
-  'set.inTokens': '输入量',
-  'set.outTokens': '输出量',
-  'set.cachedTokens': '缓存量',
-  'set.pricePerM': '百万单价',
-  'set.estCost': '预估花费：',
-  'set.resetChat': '重置聊天统计',
-  'set.resetChatConfirm': '确定清空聊天统计吗？Azure 用量按月自动清零，不受影响。',
-  'set.genSync': '生成同步码',
-  'set.scanSync': '扫码同步',
-  'set.scanClipboard': '从剪贴板同步',
-  'set.scanClipboardTitle': '粘贴剪贴板中的同步码，图片或文本均可',
-  'set.syncMerged': '已合并今日打卡数据',
-  'set.syncSelf': '这是本机自己的同步码，换一台设备试试',
-  'set.syncSelf2': '这是本机自己的同步码',
-  'set.syncBad': '这个码不是同步码，请确认',
-  'set.syncBad2': '内容不是有效的同步码，请确认复制的是同步码',
-  'set.syncQrTitle': '生成同步码',
-  'set.syncQrSub': '用其它设备扫码，合并今日学习数据',
-  'set.syncQrFail': '二维码生成失败：{msg}',
-  'set.scanTitle': '扫码同步',
-  'set.camDenied': '摄像头权限被拒绝，请点浏览器地址栏的摄像头图标允许后重试',
-  'set.camBusy': '摄像头正被其它应用占用，请关闭后重试',
-  'set.camFail': '摄像头打不开，请检查后重试',
-  'set.clipNoQr': '图片里没有识别到二维码，请确认复制的是同步码截图',
-  'set.clipDenied': '剪贴板权限被拒绝，请点浏览器地址栏左侧图标，在网站设置中允许后重试',
-  'set.clipEmpty': '剪贴板是空的，请先复制同步码',
-  'set.clipNoSupport': '当前浏览器不支持剪贴板读取',
-  'set.dlgClose': '关闭',
+  'set.dayChat': '對話',
+  'set.dayTts': '聽原聲',
+  'set.dayAssess': '錄音練習',
+  'set.dayCost': '花費',
+  'set.ttsQuota': '原聲生成（本月）',
+  'set.assessQuota': '發音評估（本月）',
+  'set.chars': '{used} / {quota} 字元',
+  'set.minutes': '{used} / 300 分鐘',
+  'set.inTokens': '輸入量',
+  'set.outTokens': '輸出量',
+  'set.cachedTokens': '快取量',
+  'set.pricePerM': '每百萬單價',
+  'set.estCost': '預估花費：',
+  'set.resetChat': '重設對話統計',
+  'set.resetChatConfirm': '確定清空對話統計嗎？Azure 用量按月自動歸零，不受影響。',
+  'set.genSync': '產生同步碼',
+  'set.scanSync': '掃碼同步',
+  'set.scanClipboard': '從剪貼簿同步',
+  'set.scanClipboardTitle': '貼上剪貼簿中的同步碼，圖片或文字均可',
+  'set.syncMerged': '已合併今日打卡數據',
+  'set.syncSelf': '這是本機的同步碼，請使用另一台設備嘗試',
+  'set.syncSelf2': '這是本機的同步碼',
+  'set.syncBad': '此碼並非有效同步碼，請確認',
+  'set.syncBad2': '內容並非有效同步碼，請確認複製的是同步碼',
+  'set.syncQrTitle': '產生同步碼',
+  'set.syncQrSub': '使用其他設備掃碼，合併今日學習數據',
+  'set.syncQrFail': '二維碼生成失敗：{msg}',
+  'set.scanTitle': '掃碼同步',
+  'set.camDenied': '鏡頭權限被拒絕，請點擊瀏覽器網址列的相機圖示允許後重試',
+  'set.camBusy': '鏡頭正被其他應用程式佔用，請關閉後重試',
+  'set.camFail': '無法開啟鏡頭，請檢查後重試',
+  'set.clipNoQr': '圖片中未識別到二維碼，請確認複製的是同步碼截圖',
+  'set.clipDenied': '剪貼簿權限被拒絕，請點擊網址列左側圖示，在網站設定中允許後重試',
+  'set.clipEmpty': '剪貼簿為空，請先複製同步碼',
+  'set.clipNoSupport': '目前瀏覽器不支援讀取剪貼簿',
+  'set.dlgClose': '關閉',
   'set.dlgShare': '分享',
   'set.checkinTitle': '今日打卡',
-  'set.checkinImgAlt': '今日打卡图',
-  'set.checkinFail': '图片生成失败：{msg}',
-  'set.checkinGenFail': '图片生成失败',
-  'set.shareTitle': '芯语伴打卡',
-  'set.langDisplay': '语言与显示',
-  'set.uiLang': '界面语言',
-  'set.uiLangZh': '中文',
+  'set.checkinImgAlt': '今日打卡圖',
+  'set.checkinFail': '圖片生成失敗：{msg}',
+  'set.checkinGenFail': '圖片生成失敗',
+  'set.shareTitle': 'SprechMate UK 打卡',
+  'set.langDisplay': '語言與顯示',
+  'set.uiLang': '介面語言',
+  'set.uiLangZh': '繁體中文 (香港)',
   'set.uiLangEn': 'English',
-  'set.learnLang': '学习语言',
-  'set.autoSpeak': '自动朗读回复',
-  'set.showLang': '显示{lang}',
-  'set.showTargetDup': '显示{lang}（学习）',
-  'set.showTransDup': '显示{lang}（译文）',
-  'set.dblHint': '双击切换显隐',
-  'set.tpl': '提示词模板',
-  'set.tplDesc': '新对话用这里选中的模板；当前对话在聊天页顶部切换。',
-  'set.tplQuoteTip': '约定：让 AI 把译文写成引用行（行首加 > ），App 会自动识别为译文，可单独隐藏、双击切换显隐，朗读和打分时也会跳过。',
-  'set.tplNew': '＋新建',
-  'set.tplRename': '重命名',
-  'set.tplDel': '删除',
-  'set.tplPh': '在这里写提示词…',
-  'set.tplNewTitle': '新建提示词模板',
-  'set.tplNewDesc': '起个名字，比如"面试官"或"餐厅点餐"。',
-  'set.tplNameLabel': '模板名称',
-  'set.tplRenameTitle': '重命名模板',
-  'set.tplMinOne': '至少保留一个提示词模板。',
-  'set.tplDelConfirm': '确定删除提示词模板「{name}」吗？',
+  'set.learnLang': '學習語言',
+  'set.autoSpeak': '自動朗讀回覆',
+  'set.showLang': '顯示{lang}',
+  'set.showTargetDup': '顯示{lang}（學習）',
+  'set.showTransDup': '顯示{lang}（譯文）',
+  'set.dblHint': '雙擊切換顯示／隱藏',
+  'set.tpl': '提示詞範本',
+  'set.tplDesc': '新對話使用此處選取的範本；目前對話可在聊天頁頂部切換。',
+  'set.tplQuoteTip': '約定：讓 AI 將譯文寫成引用行（行首加 > ），應用程式會自動識別為譯文，可單獨隱藏、雙擊切換顯示／隱藏，朗讀和評分時亦會跳過。',
+  'set.tplNew': '＋新增',
+  'set.tplRename': '重新命名',
+  'set.tplDel': '刪除',
+  'set.tplPh': '在此編寫提示詞…',
+  'set.tplNewTitle': '新增提示詞範本',
+  'set.tplNewDesc': '請輸入範本名稱，例如「面試官」或「餐廳點餐」。',
+  'set.tplNameLabel': '範本名稱',
+  'set.tplRenameTitle': '重新命名範本',
+  'set.tplMinOne': '至少保留一個提示詞範本。',
+  'set.tplDelConfirm': '確定刪除提示詞範本「{name}」嗎？',
   'set.tplUnnamed': '未命名',
-  'set.tplUnknown': '未知模板',
-  'set.tplDeleted': '（已删除）',
-  'set.chatApi': '聊天接口（OpenAI 兼容）',
+  'set.tplUnknown': '未知範本',
+  'set.tplDeleted': '（已刪除）',
+  'set.chatApi': '對話介面 API（兼容 OpenAI）',
   'set.model': '模型',
-  'set.reasoningEffort': '思考强度',
-  'set.reDefault': '不发送（默认）',
-  'set.reHint': '（思考模型可用，各家取值不同）',
+  'set.reasoningEffort': '思考強度',
+  'set.reDefault': '不發送（預設）',
+  'set.reHint': '（思考模型適用，各供應商設定值不同）',
   'set.modelPh': '例如 openai/gpt-4o-mini',
-  'set.testConn': '测试连接',
-  'set.azure': 'Azure Speech（发音评估 + 原声 TTS）',
-  'set.voiceLabel': '{lang}原声声音（声音列表跟随学习语言）',
-  'set.testTts': '测试 TTS',
-  'set.female': '女声',
-  'set.male': '男声',
-  'set.storage': '本地存储',
-  'set.chatLimit': '聊天记录保留条数（1–200）',
-  'set.chatLimitDesc': '发给 AI 的消息条数，含你当前这句。设为 1 则 AI 不看历史。改小立即生效，删掉的消息找不回来。',
-  'set.recLimit': '练习记录保留条数（1–200）',
-  'set.recLimitDesc': '每个对话保留最近 N 条练习，超出的连录音一起删。改小立即生效。',
-  'set.ttsLimit': '原声缓存条数（0–500，0 = 关闭）',
-  'set.ttsLimitDesc': '同一句话 + 同一声音只生成一次，之后读本地。设为 0 关闭缓存。',
-  'set.convLimit': '对话保留个数（10–1000）',
-  'set.convLimitDesc': '只保留最近 N 个对话，超出的连记录和录音一起删。改小立即生效。',
-  'set.storageUsage': '存储占用',
-  'set.usedSpace': '本地已用空间',
-  'set.convCount': '对话个数',
-  'set.ttsCount': '原声缓存个数',
-  'set.countUnit': '{n} / {limit} 个',
-  'set.itemUnit': '{n} / {limit} 条',
-  'set.quotaAbout': '（配额约 {q}）',
-  'set.noEstimate': '浏览器不支持统计',
-  'set.privacy': '所有数据和设置只存在你的浏览器里，不会上传。重要数据请用"导出所有对话""导出设置"备份。',
-  'set.manage': '设置管理',
-  'set.exportSet': '导出设置',
-  'set.importSet': '导入设置',
-  'set.resetSet': '还原默认设置',
-  'set.exportFail': '导出失败：{msg}',
-  'set.importNotObj': '文件内容不是设置',
-  'set.importBadTpl': '模板格式不对',
-  'set.importBadTplItem': '模板条目格式不对',
-  'set.importConfirm': '导入将覆盖当前全部设置（含提示词模板），确定吗？',
-  'set.imported': '设置已导入。',
-  'set.importFail': '导入失败：{msg}',
-  'set.importParseFail': '文件无法解析',
-  'set.importReadFail': '导入失败：文件读取出错',
-  'set.resetConfirm': '确定要还原所有设置为默认值吗？自定义的提示词模板会被删除，恢复成初始的两个模板。',
-  'set.resetDone': '已还原为默认设置。',
+  'set.testConn': '測試連線',
+  'set.azure': 'Azure Speech（發音評估 + 原聲 TTS）',
+  'set.voiceLabel': '{lang}原聲語音（語音清單隨學習語言切換）',
+  'set.testTts': '測試 TTS',
+  'set.female': '女聲',
+  'set.male': '男聲',
+  'set.storage': '本機儲存',
+  'set.chatLimit': '對話紀錄保留條數（1–200）',
+  'set.chatLimitDesc': '發送予 AI 的訊息條數，包含目前此句。設定為 1 則 AI 不讀取歷史。調小立即生效，已刪除的訊息無法復原。',
+  'set.recLimit': '練習紀錄保留條數（1–200）',
+  'set.recLimitDesc': '每個對話保留最近 N 條練習紀錄，超出的部分連同錄音一併刪除。調小立即生效。',
+  'set.ttsLimit': '原聲快取條數（0–500，0 = 關閉）',
+  'set.ttsLimitDesc': '同一語句 + 同一口音只生成一次，其後讀取本機快取。設為 0 則關閉快取。',
+  'set.convLimit': '對話保留數量（10–1000）',
+  'set.convLimitDesc': '只保留最近 N 個對話，超出的部分連同紀錄與錄音一併刪除。調小立即生效。',
+  'set.storageUsage': '儲存空間佔用',
+  'set.usedSpace': '本機已用空間',
+  'set.convCount': '對話數量',
+  'set.ttsCount': '原聲快取數量',
+  'set.countUnit': '{n} / {limit} 個',
+  'set.itemUnit': '{n} / {limit} 條',
+  'set.quotaAbout': '（配額約 {q}）',
+  'set.noEstimate': '瀏覽器不支援統計',
+  'set.privacy': '所有資料與設定僅儲存於您的瀏覽器中，絕不上傳。重要資料請使用「匯出所有對話」「匯出設定」備份。',
+  'set.manage': '設定管理',
+  'set.exportSet': '匯出設定',
+  'set.importSet': '匯入設定',
+  'set.resetSet': '還原預設設定',
+  'set.exportFail': '匯出失敗：{msg}',
+  'set.importNotObj': '檔案內容並非設定格式',
+  'set.importBadTpl': '範本格式不正確',
+  'set.importBadTplItem': '範本條目格式不正確',
+  'set.importConfirm': '匯入將覆蓋目前所有設定（包含提示詞範本），確定要繼續嗎？',
+  'set.imported': '設定已成功匯入。',
+  'set.importFail': '匯入失敗：{msg}',
+  'set.importParseFail': '檔案無法解析',
+  'set.importReadFail': '匯入失敗：讀取檔案時發生錯誤',
+  'set.resetConfirm': '確定要將所有設定還原為預設值嗎？自訂的提示詞範本將被刪除，並恢復為初始範本。',
+  'set.resetDone': '已還原為預設設定。',
   'set.version': '版本',
-  'lang.english': '英语',
-  'lang.chinese': '中文',
+  'lang.english': '英語',
+  'lang.chinese': '繁體中文',
   'dlg.ok': '知道了',
-  'dlg.confirm': '确定',
+  'dlg.confirm': '確定',
   'dlg.cancel': '取消',
-  'dlg.delete': '删除',
+  'dlg.delete': '刪除',
   'dlg.clear': '清空',
-  'dlg.import': '导入',
-  'dlg.restore': '还原',
-  'dlg.delAll': '全部删除',
-  'dlg.exportFail': '导出失败',
-  'misc.storageFull': '手机本地存满了，这次的内容可能没保存上。删掉一些不用的旧对话，就能继续存了。',
+  'dlg.import': '匯入',
+  'dlg.restore': '還原',
+  'dlg.delAll': '全部刪除',
+  'dlg.exportFail': '匯出失敗',
+  'misc.storageFull': '設備儲存空間已滿，本次內容可能未能成功儲存。請刪除部分無用之舊對話後再試。',
   'misc.colon': '：',
-  'misc.scriptFail': '脚本加载失败，请检查网络',
-  'misc.newConv': '新对话',
+  'misc.scriptFail': '指令碼載入失敗，請檢查網絡連線',
+  'misc.newConv': '新對話',
   'misc.times': '次',
   'misc.sentUnit': '句',
-  'misc.convName': '{lang}对话',
-  'misc.exportTime': '导出时间：',
+  'misc.convName': '{lang}對話',
+  'misc.exportTime': '匯出時間：',
   'misc.you': '你',
   'misc.ai': 'AI',
-  'misc.practiceRec': '练习记录',
-  'misc.mdTime': '时间',
-  'misc.mdScore': '分数',
-  'misc.mdAcc': '准确度',
+  'misc.practiceRec': '練習紀錄',
+  'misc.mdTime': '時間',
+  'misc.mdScore': '分數',
+  'misc.mdAcc': '準確度',
   'misc.mdFlu': '流利度',
   'misc.mdComp': '完整度',
   'misc.mdSentence': '句子',
-  'misc.noConvExport': '暂无对话可导出',
-  'misc.allConvTitle': '{lang}对话合集（共 {n} 个对话）',
-  'misc.fileConv': '{lang}对话-{title}.md',
-  'misc.fileAll': '{lang}对话-全部-{stamp}.md',
-  'ck.chat': '对话',
-  'ck.tts': '听原声',
-  'ck.assess': '录音练习',
+  'misc.noConvExport': '暫無對話可供匯出',
+  'misc.allConvTitle': '{lang}對話合集（共 {n} 個對話）',
+  'misc.fileConv': '{lang}對話-{title}.md',
+  'misc.fileAll': '{lang}對話-全部-{stamp}.md',
+  'ck.chat': '對話',
+  'ck.tts': '聽原聲',
+  'ck.assess': '錄音練習',
   'ck.times': '次',
   'ck.sent': '句'
 },
@@ -1740,7 +1740,7 @@ function transLangName() { return t(getSettings().uiLang === 'en' ? 'lang.englis
 /* 应用界面语言：静态文本 + 动态下拉框 + 语言相关标签 */
 function applyI18n() {
   const lang = getSettings().uiLang;
-  document.documentElement.lang = lang === 'en' ? 'en' : 'zh-CN';
+  document.documentElement.lang = lang === 'en' ? 'en' : 'zh-HK';
   document.title = t('app.title');
   document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.getAttribute('data-i18n')); });
   document.querySelectorAll('[data-i18n-ph]').forEach(el => { el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph'))); });
@@ -4723,7 +4723,7 @@ function idbOpen() {
         }
       };
       req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error || new Error('IndexedDB 打开失败'));
+      req.onerror = () => reject(req.error || new Error('IndexedDB 開啟失敗'));
     } catch (e) { reject(e); }
   });
 }
@@ -5752,7 +5752,7 @@ function importReviewsJson(file) {
       renderStagesDashboard();
       alertDlg('✅ 進度備份已安全驗證並成功還原！');
     } catch (err) {
-      alertDlg('導入失敗：JSON 格式無效或檔案已損毀');
+      alertDlg('匯入失敗：JSON 格式無效或檔案已損毀');
     }
   };
   reader.readAsText(file);
@@ -5771,7 +5771,7 @@ async function loadReadingPresets() {
     ukReadingPresets = [
       {
         id: 'gov_rent',
-        title: '🏠 GOV.UK 官方租房指南 (Tenancy Checklist)',
+        title: '🏠 GOV.UK 官方租屋指南 (Tenancy Checklist)',
         text: 'Before you move into a rented home in England, your landlord or letting agent must give you a copy of the How to Rent guide. You must also receive a valid gas safety certificate, an Energy Performance Certificate, and confirmation that your deposit is protected in a government-approved scheme within 30 days.'
       }
     ];
@@ -5803,7 +5803,7 @@ function initReadingStudio() {
   if (analyzeBtn) {
     analyzeBtn.onclick = () => {
       const text = document.getElementById('readingInput').value.trim();
-      if (!text) { alertDlg('請先粘貼或選擇英文文章段落'); return; }
+      if (!text) { alertDlg('請先貼上或選擇英文文章段落'); return; }
       analyzeReadingText(text);
     };
   }
