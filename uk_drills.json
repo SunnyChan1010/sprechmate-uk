@@ -1,0 +1,38 @@
+[
+  {
+    "category": "Glottal Stop /ʔ/ (英音喉塞音)",
+    "description": "英音口語中，字中或字尾的 /t/ 經常由聲帶瞬間閉合截斷氣流代替，產生特有的頓音節奏。",
+    "examples": [
+      { "text": "Can I have a bottle of water, please?", "note": "bottle -> bo'le, water -> wa'er" },
+      { "text": "It is not quite that important.", "note": "not -> no', that -> tha'" },
+      { "text": "I will get it sorted right now.", "note": "get it -> ge' i'" }
+    ]
+  },
+  {
+    "category": "Linking 'r' & Intrusive 'r' (英音連音 r 與侵入性 r)",
+    "description": "英式非捲舌音中，當前詞以 r 結尾且後詞以元音起音時需連讀；若兩詞無 r 但為元音過渡，母語者會自然插入 /r/ 音。",
+    "examples": [
+      { "text": "Law and order is essential for society.", "note": "law-r-and order (侵入性 r)" },
+      { "text": "There are four eggs in the fridge.", "note": "there-r-are four-r-eggs (連讀 r)" },
+      { "text": "The idea of going to the cinema sounds lovely.", "note": "idea-r-of going (侵入性 r)" }
+    ]
+  },
+  {
+    "category": "Weak Forms (功能詞自然弱讀)",
+    "description": "英語是重音等時節奏語言，介詞、助動詞如 to, for, can, been 在自然語流中一律弱化為中元音 /ə/。",
+    "examples": [
+      { "text": "I have been waiting for the bus for an hour.", "note": "have -> /həv/, for -> /fə/, an -> /ən/" },
+      { "text": "You can come to our house tomorrow.", "note": "can -> /kən/, to -> /tə/" },
+      { "text": "Would you like a cup of tea?", "note": "of -> /əv/, a -> /ə/" }
+    ]
+  },
+  {
+    "category": "RP Broad 'A' /ɑː/ (英音開後長元音)",
+    "description": "標準英音（SSBE/RP）中，bath, ask, fast, path 讀開闊後長音 /ɑː/，切勿讀成美音扁平的 /æ/。",
+    "examples": [
+      { "text": "I need to take a quick bath before we leave.", "note": "bath -> /bɑːθ/ (不是美音 /bæθ/)" },
+      { "text": "Could I ask you for a fast response?", "note": "ask -> /ɑːsk/, fast -> /fɑːst/" },
+      { "text": "Follow the path through the grass to the gate.", "note": "path -> /pɑːθ/, grass -> /ɡrɑːs/" }
+    ]
+  }
+]

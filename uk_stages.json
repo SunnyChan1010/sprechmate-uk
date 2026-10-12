@@ -1,0 +1,80 @@
+[
+  {
+    "level": 1,
+    "badge": "🥉",
+    "id": "bronze_survival",
+    "name": "英國生活生存突破 (Survival UK)",
+    "xpRequired": 300,
+    "description": "攻克最基礎的門面溝通，消除開口焦慮。自如應對超市、外賣、郵局與地鐵延誤。",
+    "targets": {
+      "conversations": 10,
+      "avgScore": 70,
+      "reviews": 10
+    },
+    "missions": [
+      { "id": "m1", "title": "超市自助結賬求助 (Approval needed)", "category": "Retail", "xp": 30 },
+      { "id": "m2", "title": "Pret / Greggs 點餐客製化", "category": "Food", "xp": 30 },
+      { "id": "m3", "title": "Royal Mail 郵局取包裹與退貨", "category": "Services", "xp": 30 },
+      { "id": "m4", "title": "倫敦地鐵 Oyster / 火車延誤問路", "category": "Transit", "xp": 30 }
+    ]
+  },
+  {
+    "level": 2,
+    "badge": "🥈",
+    "id": "silver_daily",
+    "name": "生活行政自理 (Daily Affairs)",
+    "xpRequired": 1000,
+    "description": "掌握英國核心行政、醫療、市政稅與水電公務交涉，辦事不再需要找人代勞。",
+    "targets": {
+      "conversations": 15,
+      "avgScore": 80,
+      "fluency": 75,
+      "reviews": 25
+    },
+    "missions": [
+      { "id": "m5", "title": "NHS GP 8:00 AM 電話分診預約", "category": "Healthcare", "xp": 40 },
+      { "id": "m6", "title": "Council Tax 申報與輪式垃圾桶遺漏", "category": "Council", "xp": 40 },
+      { "id": "m7", "title": "銀行開戶與地址證明核實", "category": "Finance", "xp": 40 },
+      { "id": "m8", "title": "水電燃氣查表與寬頻報障", "category": "Utilities", "xp": 40 }
+    ]
+  },
+  {
+    "level": 3,
+    "badge": "🥇",
+    "id": "gold_autonomy",
+    "name": "獨立維權與長文閱讀 (Autonomy & Legal)",
+    "xpRequired": 2500,
+    "description": "看懂官方規例與租約條款，遇到中介推託或工作分歧時，能用堅定而禮貌的英式表達捍衛權益。",
+    "targets": {
+      "conversations": 20,
+      "avgScore": 85,
+      "prosody": 80,
+      "readings": 5,
+      "reviews": 50
+    },
+    "missions": [
+      { "id": "m9", "title": "租屋維修緊急催辦 (Combi-boiler 故障)", "category": "Tenancy", "xp": 50 },
+      { "id": "m10", "title": "退租押金爭端抗辯 (DPS 扣款協商)", "category": "Legal", "xp": 50 },
+      { "id": "m11", "title": "職場英式委婉反駁 (Softening language)", "category": "Workplace", "xp": 50 },
+      { "id": "m12", "title": "GOV.UK 官方規例與能源合約精讀", "category": "Reading", "xp": 50 }
+    ]
+  },
+  {
+    "level": 4,
+    "badge": "💎",
+    "id": "platinum_fluency",
+    "name": "深度融入與英倫社交 (Cultural Fluency)",
+    "xpRequired": 5000,
+    "description": "享受英式幽默、雙關自嘲與 Pub 文化，閱讀深度新聞評論隨心所欲，英語完全內化為第二本能。",
+    "targets": {
+      "conversations": 30,
+      "avgScore": 90,
+      "masteredPhrases": 100
+    },
+    "missions": [
+      { "id": "m13", "title": "本地 Pub 吧台點單與輪流請酒 (My round)", "category": "Culture", "xp": 60 },
+      { "id": "m14", "title": "經典英式天氣抱怨與週末 Banter 寒暄", "category": "Social", "xp": 60 },
+      { "id": "m15", "title": "BBC News 評論員社論深度研讀與辯論", "category": "CurrentAffairs", "xp": 60 }
+    ]
+  }
+]

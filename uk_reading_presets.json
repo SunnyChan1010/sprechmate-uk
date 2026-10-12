@@ -1,0 +1,37 @@
+[
+  {
+    "id": "gov_rent",
+    "title": "🏠 GOV.UK 官方租房指南 (Tenancy Checklist)",
+    "source": "GOV.UK",
+    "category": "Housing & Legal",
+    "text": "Before you move into a rented home in England, your landlord or letting agent must give you a copy of the How to Rent guide. You must also receive a valid gas safety certificate, an Energy Performance Certificate, and confirmation that your deposit is protected in a government-approved scheme within 30 days. Your tenancy deposit is capped by law at five weeks rent for properties with an annual rent under fifty thousand pounds. During your tenancy, the landlord is legally responsible under Section 11 of the Landlord and Tenant Act for repairs to the exterior and structure of the property. This includes roofs, walls, windows, and external doors. They are also responsible for keeping water supply, heating, and sanitation installations in proper working order. If you report a broken combi-boiler or severe damp and mould, the landlord must arrange repairs within a reasonable timeframe. Always communicate in writing and keep a dated paper trail."
+  },
+  {
+    "id": "nhs_guide",
+    "title": "🏥 NHS 求醫看診指南 (111 vs GP vs 999)",
+    "source": "NHS England",
+    "category": "Healthcare",
+    "text": "Understanding how the NHS works will save you time and ensure you receive appropriate medical care. Call 999 only for life-threatening emergencies, such as chest pain, difficulty breathing, stroke symptoms, or severe bleeding. If your condition is urgent but not life-threatening, you should call NHS 111 or visit 111.nhs.uk online. A trained clinical adviser will assess your symptoms and direct you to the best service, including out-of-hours doctors, an urgent treatment centre, or an emergency dentist. For ongoing health concerns, routine illnesses, and prescription refills, contact your local GP surgery. Most GP practices open telephone lines at eight o'clock in the morning for triage bookings. You can also visit your local high street chemist or pharmacist for advice on minor ailments such as cold, coughs, and minor rashes without booking an appointment."
+  },
+  {
+    "id": "mse_energy",
+    "title": "⚡ 水電瓦斯帳單解析 (MSE Energy Price Cap)",
+    "source": "MoneySavingExpert",
+    "category": "Utilities & Bills",
+    "text": "Navigating your energy bills in the United Kingdom requires understanding two key figures: unit rates and standing charges. The energy price cap set by Ofgem limits the maximum amount suppliers can charge you per kilowatt hour of gas and electricity. However, it is not a cap on your total bill; the more energy you use, the more you pay. The standing charge is a fixed daily fee that covers the cost of maintaining the pipes and wires that bring energy to your home. It applies even if you do not use any gas or electricity on a given day. To keep your bills accurate and avoid high estimated charges, submit regular meter readings to your supplier every month. If you have a smart meter, readings should be transmitted automatically. If you struggle with utility costs, contact your supplier immediately to request a manageable payment plan."
+  },
+  {
+    "id": "bbc_cost",
+    "title": "📰 英國經濟與生活成本動態 (BBC Economy)",
+    "source": "BBC News",
+    "category": "Current Affairs",
+    "text": "The Bank of England's Monetary Policy Committee has been closely monitoring inflation and wage growth across the country. Higher interest rates have placed upward pressure on monthly mortgage repayments for homeowners and indirectly affected rental prices in London and major regional hubs. Consumers have adapted by seeking out supermarket own-brand products and shopping at discount retailers like Aldi and Lidl. The Chancellor of the Exchequer emphasised the government's commitment to fiscal discipline and public service investment during the parliamentary statement. Meanwhile, analysts suggest that household confidence depends heavily on stable energy prices and lower inflation throughout the upcoming financial quarter."
+  },
+  {
+    "id": "reddit_pub",
+    "title": "🍻 英國 Pub 社交與吧台潛規則 (Reddit r/AskUK)",
+    "source": "Reddit r/AskUK",
+    "category": "Social & Culture",
+    "text": "If you are new to the UK, mastering pub etiquette is an essential rite of passage. In a traditional British pub, there is usually no table service; you simply walk up to the bar, wait your turn patiently in an imaginary queue, and catch the bartender's eye. Never snap your fingers, wave your money, or shout across the counter. When you order, ask for your drinks first, such as a pint of lager, bitter, or cider, and then ask for snacks like a packet of crisps or pork scratchings. If you are drinking in a group, be mindful of the round system: everyone takes turns buying a drink for the whole group. Do not leave the pub before buying your round, or you will be remembered. Finally, when someone asks 'Alright?', it is a greeting rather than an inquiry into your life story; a simple 'Yeah, good cheers, you?' is spot on."
+  }
+]
