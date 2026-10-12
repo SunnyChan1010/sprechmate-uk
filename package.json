@@ -6,7 +6,8 @@
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File ./start-uk.ps1",
     "serve": "npx serve -p 8000 -l 127.0.0.1 .",
-    "test:syntax": "node -e \"const fs = require('fs'); const { execSync } = require('child_process'); ['uk_engine.js', 'sw.js'].forEach(f => { execSync('node -c ' + f); console.log('✓ JS: ' + f); }); ['uk_stages.json', 'uk_drills.json', 'uk_reading_presets.json', 'uk_prompts.json', 'manifest.json'].forEach(f => { JSON.parse(fs.readFileSync(f, 'utf8')); console.log('✓ JSON: ' + f); }); const html = fs.readFileSync('index.html', 'utf8'); const m = html.match(/<script>([\\s\\S]*?)<\\/script>/); new Function(m[1]); console.log('✓ HTML inline script OK'); console.log('ALL SYNTAX CHECKS PASSED.');\""
+    "test:syntax": "node -e \"const fs = require('fs'); const { execSync } = require('child_process'); ['uk_engine.js', 'sw.js'].forEach(f => { execSync('node -c ' + f); console.log('✓ JS: ' + f); }); ['uk_stages.json', 'uk_drills.json', 'uk_reading_presets.json', 'uk_prompts.json', 'manifest.json'].forEach(f => { JSON.parse(fs.readFileSync(f, 'utf8')); console.log('✓ JSON: ' + f); }); const html = fs.readFileSync('index.html', 'utf8'); const m = html.match(/<script>([\\s\\S]*?)<\\/script>/); new Function(m[1]); console.log('✓ HTML inline script OK'); console.log('ALL SYNTAX CHECKS PASSED.');\"",
+    "deploy": "cf deploy"
   },
   "keywords": [
     "english-learning",
@@ -19,5 +20,9 @@
     "gemini-api"
   ],
   "author": "SprechMate Community & UK Edition Contributors",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "cf": "^1.0.0-beta.14",
+    "wrangler": "^4.149.0"
+  }
 }
