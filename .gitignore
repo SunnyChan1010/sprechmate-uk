@@ -1,6 +1,30 @@
-# System files
+# Logs and temporary files
+*.log
+*.tmp
+*.zip
 .DS_Store
 Thumbs.db
+
+# User personal data backups & keys
+*.local.json
+personal_data/
+user_recordings/
+backup_data/
+
+# Local compute and token audit reports (not synced to GitHub)
+docs/audit/
+*.audit.md
+*AUDIT*.md
+PROJECT_METRICS_AUDIT.md
+
+# Project documentation & AI Agent context (local only, do not sync to GitHub)
+docs/
+AGENT_CONTEXT.md
+.cursorrules
+.agentrules
+CODE_RULES.md
+*.rules.md
+*.local.md
 
 # Node
 node_modules/
@@ -10,5 +34,3 @@ npm-debug.log*
 .vscode/
 .idea/
 *.swp
-*.tmp
-*.log
