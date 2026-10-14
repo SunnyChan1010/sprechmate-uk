@@ -442,7 +442,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
     <div class="card">
       <div class="section-title-row">
         <h2>📖 英國生活長文沉浸精讀</h2>
-        <span class="hint">智能斷句 · 點擊跟讀 · 雙擊查詞</span>
+        <span class="hint">智能斷句 · 點擊跟讀 · 點擊單詞查詞</span>
       </div>
       <div class="field">
         <label>精選英國官方與在地真實語料：</label>
@@ -512,6 +512,9 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
         <h3>⭐ 我的英式在地語塊本</h3>
         <button id="importBackupJsonBtn" class="linkbtn">還原／匯入進度</button>
         <input type="file" id="importBackupFileInput" class="hidden" accept=".json"/>
+      </div>
+      <div class="field" style="margin-bottom:8px">
+        <input id="phrasebookSearch" type="search" placeholder="🔍 搜尋已收錄的單詞、語塊或釋義…" autocomplete="off"/>
       </div>
       <div id="phrasebookList"></div>
     </div>
@@ -659,11 +662,11 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
       <h2 data-i18n="set.chatApi">對話介面 API（兼容 OpenAI）</h2>
       <div class="field">
         <label>Base URL（Endpoint）</label>
-        <input id="setBaseUrl" type="text" placeholder="https://openrouter.ai/api/v1"/>
+        <input id="setBaseUrl" type="text" placeholder="https://generativelanguage.googleapis.com/v1beta/openai"/>
       </div>
       <div class="field">
         <label data-i18n="set.model">模型</label>
-        <input id="setModel" type="text" data-i18n-ph="set.modelPh" placeholder="例如 openai/gpt-4o-mini"/>
+        <input id="setModel" type="text" data-i18n-ph="set.modelPh" placeholder="例如 gemini-2.5-flash"/>
       </div>
       <div class="field">
         <label><span data-i18n="set.reasoningEffort">思考強度</span> <span class="hint" data-i18n="set.reHint">（思考模型適用，各供應商設定值不同）</span></label>
@@ -752,7 +755,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
         <button id="resetSettingsBtn" type="button" class="danger" data-i18n="set.resetSet">還原預設設定</button>
       </div>
     </div>
-    <div class="ver"><span data-i18n="set.version">版本</span> v20261009-23 · <a class="ver-link" href="https://github.com/2-3-5-7/SprechMate" target="_blank" rel="noopener">GitHub</a></div>
+    <div class="ver"><span data-i18n="set.version">版本</span> v1.3.0 · <a class="ver-link" href="https://github.com/SunnyChan1010/sprechmate-uk" target="_blank" rel="noopener">GitHub</a></div>
   </section>
 
   <!-- ================= 視覺化口型與舌位圖解彈窗 ================= -->
@@ -1052,8 +1055,8 @@ function getUKTemplates(uiLang) {
 }
 
 const DEFAULTS = {
-  chatBaseUrl: 'https://openrouter.ai/api/v1',
-  chatModel: '',
+  chatBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  chatModel: 'gemini-2.5-flash',
   chatKey: '',
   azureKey: '',
   azureRegion: 'uksouth',
@@ -3597,6 +3600,12 @@ function updateConvTitle(c) {
 let dictRec = null;
 let dictFocusAfter = true; // 听写结束后是否把焦点放回输入框；发送时设为 false，保证 ASDF 快捷键立即可用
 let chatSending = false; // 流式输出中防重复发送
+let chatAbortCtrl = null; // 流式请求中断控制器（防弱网永久挂起）
+window.abortChatStream = function() {
+  if (chatAbortCtrl) {
+    try { chatAbortCtrl.abort(new Error('已手動停止生成')); } catch (e) {}
+  }
+};
 function toggleDictation() {
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (!SR) { alertDlg(t('dict.noSupport')); return; }
@@ -3664,6 +3673,9 @@ async function sendChatCore(c) {
   const s = getSettings();
   if (chatSending) return; // 流式输出中，不重复发送
   chatSending = true;
+  const ctrl = new AbortController();
+  chatAbortCtrl = ctrl;
+  let timeoutId = setTimeout(() => ctrl.abort(new Error('連線逾時（15秒），請檢查網路訊號後重試')), 15000);
   const convId = c.id;
   const aiMsg = { role: 'assistant', content: '' };
   try {
@@ -3679,12 +3691,14 @@ async function sendChatCore(c) {
     const base = s.chatBaseUrl.replace(/\/+$/, '');
     const apiMsgs = [{ role: 'system', content: convPrompt(c).content }]
       .concat(c.messages.filter(m => m.content && m.content !== '…').map(m => ({ role: m.role, content: m.content })));
-    // 流式请求（SSE）：OpenAI 兼容接口通用
+    // 流式请求（SSE）：OpenAI 兼容接口通用（附带 AbortSignal 防弱网死锁）
     const res = await fetch(base + '/chat/completions', {
       method: 'POST',
       headers: chatHeaders(s.chatKey, base),
+      signal: ctrl.signal,
       body: JSON.stringify(Object.assign({ model: s.chatModel, temperature: 0.7, stream: true, messages: apiMsgs, stream_options: { include_usage: true } }, reasoningEffortParam(s)))
     });
+    clearTimeout(timeoutId);
     if (!res.ok || !res.body) {
       const txt = await res.text().catch(() => '');
       let em = t('chat.reqFail');
@@ -3710,7 +3724,9 @@ async function sendChatCore(c) {
       list.scrollTop = list.scrollHeight;
     };
     while (!finished) {
+      timeoutId = setTimeout(() => ctrl.abort(new Error('串流回應中斷（地鐵／弱網訊號不穩），請點擊重試')), 20000);
       const step = await reader.read();
+      clearTimeout(timeoutId);
       if (step.done) break;
       buf += decoder.decode(step.value, { stream: true });
       const lines = buf.split('\n');
@@ -3755,9 +3771,12 @@ async function sendChatCore(c) {
     }
   } catch (e) {
     const i = c.messages.lastIndexOf(aiMsg);
-    if (i >= 0) c.messages[i] = { role: 'assistant', content: '', failed: true, failMsg: e.message };
+    const errMsg = (ctrl.signal.aborted && ctrl.signal.reason && ctrl.signal.reason.message) ? ctrl.signal.reason.message : (e && e.message) || t('chat.netErr');
+    if (i >= 0) c.messages[i] = { role: 'assistant', content: '', failed: true, failMsg: errMsg };
     persistConv(c); renderChat();
   } finally {
+    clearTimeout(timeoutId);
+    chatAbortCtrl = null;
     chatSending = false;
   }
 }
@@ -3969,15 +3988,23 @@ async function ttsBlob(text, voice) {
   const vLocale = String(v || '').split('-').slice(0, 2).join('-') || learnLocale(); // 从声音名取 locale（如 de-DE-KatjaNeural → de-DE）
   const ssml = "<speak version='1.0' xml:lang='" + vLocale + "'><voice xml:lang='" + vLocale + "' name='" +
     esc(v) + "'>" + escapeXml(txt) + "</voice></speak>";
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Ocp-Apim-Subscription-Key': s.azureKey,
-      'Content-Type': 'application/ssml+xml',
-      'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3'
-    },
-    body: ssml
-  });
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(new Error('TTS timeout')), 6000);
+  let res;
+  try {
+    res = await fetch(url, {
+      method: 'POST',
+      signal: ctrl.signal,
+      headers: {
+        'Ocp-Apim-Subscription-Key': s.azureKey,
+        'Content-Type': 'application/ssml+xml',
+        'X-Microsoft-OutputFormat': 'audio-24khz-48kbitrate-mono-mp3'
+      },
+      body: ssml
+    });
+  } finally {
+    clearTimeout(timer);
+  }
   if (!res.ok) {
     const et = await res.text().catch(() => '');
     throw new Error(t('sent.ttsFail', { status: res.status, msg: et.slice(0, 180) }));
@@ -4010,28 +4037,28 @@ function guessLangByScript(t) {
 }
 /* 空/无效音频判定：Azure 错配（德语声音读日文）可能返回空 body，必须拦下，不能进缓存 */
 const isValidAudioBlob = b => b instanceof Blob && b.size > 0;
-/* 在 TTS 缓存里按文本找其他 locale 声音的音频（换学习语言后，旧声音的音频不再变孤儿） */
+/* 在 TTS 缓存里按文本找其他 locale 声音的音频（先用 getAllKeys 过滤键名，避免全表反序列化 Blob 与 json:convs） */
 async function ttsFindByTextOtherLocale(t, curLocale) {
   const suffix = ':' + hashStr(t);
   try {
     const db = await idb();
-    return await new Promise((resolve, reject) => {
+    const keys = await new Promise((resolve, reject) => {
       const tx = db.transaction('audios', 'readonly');
-      const rq = tx.objectStore('audios').openCursor();
-      rq.onsuccess = e => {
-        const cur = e.target.result;
-        if (!cur) return resolve(null);
-        const k = cur.key;
-        if (typeof k === 'string' && k.indexOf('tts:') === 0 && k.endsWith(suffix)) {
-          const vk = k.slice(4, k.length - suffix.length); // 声音名
-          const vLocale = vk.split('-').slice(0, 2).join('-');
-          const val = cur.value;
-          if (val && isValidAudioBlob(val.blob) && val.text === t && vLocale !== curLocale) return resolve(val);
-        }
-        cur.continue();
-      };
+      const rq = tx.objectStore('audios').getAllKeys();
+      rq.onsuccess = () => resolve(rq.result || []);
       rq.onerror = () => reject(rq.error);
     });
+    const matchedKeys = keys.filter(k => {
+      if (typeof k !== 'string' || k.indexOf('tts:') !== 0 || !k.endsWith(suffix)) return false;
+      const vk = k.slice(4, k.length - suffix.length);
+      const vLocale = vk.split('-').slice(0, 2).join('-');
+      return vLocale !== curLocale;
+    });
+    for (const mk of matchedKeys) {
+      const val = await idbGet(mk).catch(() => null);
+      if (val && isValidAudioBlob(val.blob) && val.text === t) return val;
+    }
+    return null;
   } catch (e) { return null; }
 }
 /* 把技术性错误翻译成人话，避免把 "t is not a function" 这类报错直接甩给用户 */
@@ -4084,23 +4111,24 @@ async function ttsCached(rawText, voice) {
   }
   return { blob: blob, text: txt, cached: false };
 }
-/* TTS 缓存淘汰：只保留最新的 limit 条 */
+/* TTS 缓存淘汰：先用 getAllKeys() 仅检查键数量，未超限时不反序列化任何 Blob 或 json:convs */
 async function trimTtsCache(limit) {
   const db = await idb();
-  const items = await new Promise((resolve, reject) => {
+  const allKeys = await new Promise((resolve, reject) => {
     const tx = db.transaction('audios', 'readonly');
-    const out = [];
-    const rq = tx.objectStore('audios').openCursor();
-    rq.onsuccess = e => {
-      const cur = e.target.result;
-      if (cur) { out.push({ key: cur.key, val: cur.value }); cur.continue(); }
-      else resolve(out);
-    };
+    const rq = tx.objectStore('audios').getAllKeys();
+    rq.onsuccess = () => resolve(rq.result || []);
     rq.onerror = () => reject(rq.error);
   });
-  const tts = items.filter(x => typeof x.key === 'string' && x.key.indexOf('tts:') === 0 && x.val && typeof x.val.t === 'number');
-  if (tts.length <= limit) return;
-  tts.sort((a, b) => a.val.t - b.val.t);
+  const ttsKeys = allKeys.filter(k => typeof k === 'string' && k.indexOf('tts:') === 0);
+  if (ttsKeys.length <= limit) return;
+
+  const tts = [];
+  for (const k of ttsKeys) {
+    const val = await idbGet(k).catch(() => null);
+    tts.push({ key: k, t: (val && typeof val.t === 'number') ? val.t : 0 });
+  }
+  tts.sort((a, b) => a.t - b.t);
   await new Promise((resolve, reject) => {
     const tx = db.transaction('audios', 'readwrite');
     tts.slice(0, tts.length - limit).forEach(x => tx.objectStore('audios').delete(x.key));
@@ -4109,6 +4137,14 @@ async function trimTtsCache(limit) {
   });
 }
 async function genRefAudio(text, autoplay) {
+  const s = getSettings();
+  const cleanTxt = targetLangText(text);
+  if (!s.azureKey && typeof playUkVoice === 'function' && cleanTxt) {
+    if (autoplay !== false) playUkVoice(cleanTxt);
+    const rh = $('recHint');
+    if (rh) rh.textContent = '🔊 未設定 Azure Key，已自動使用系統內建英式語音（en-GB）朗讀示範';
+    return true;
+  }
   try {
     const r = await ttsCached(text);
     lastRefBlob = r.blob;
@@ -4118,6 +4154,12 @@ async function genRefAudio(text, autoplay) {
     refPlayer.load(lastRefUrl, autoplay !== false);
     return true;
   } catch (e) {
+    if (autoplay !== false && typeof playUkVoice === 'function' && cleanTxt) {
+      playUkVoice(cleanTxt);
+      const rh = $('recHint');
+      if (rh) rh.textContent = '🚇 網路訊號不佳，已自動降級為離線系統英式語音（en-GB）朗讀';
+      return false;
+    }
     if (!e || !e.silent) dlg({ title: t('sent.genFail'), message: friendlyErr(e) });
     return false;
   }
@@ -4538,100 +4580,6 @@ function subBar(label, v) {
     '" style="width:' + v + '%"></i></div><b>' + v + '</b></div>';
 }
 
-/* 德语发音规则 → 预估 IPA 音标数组
-   背景：Azure 发音评估不对 de-DE 返回音素名称（只有分数），按拼读规则估算。
-   调用方必须用 Azure 实际音素数量校验，数量对不上则弃用。 */
-function germanG2P(word) {
-  const w = String(word || '').toLowerCase().replace(/[^a-zäöüß]/g, '');
-  const N = w.length;
-  if (!N) return null;
-  // 高频词例外（词尾单辅音的长短音是词汇性的，规则猜不准）
-  const EXC = {
-    mit: ['m','ɪ','t'], in: ['ɪ','n'], an: ['a','n'], von: ['f','ɔ','n'],
-    ob: ['ɔ','p'], das: ['d','a','s'], hat: ['h','a','t'], man: ['m','a','n'],
-    es: ['ɛ','s'], bin: ['b','ɪ','n'], stadt: ['ʃ','t','a','t']
-  };
-  if (EXC[w]) return EXC[w];
-  const out = [];
-  const isV = c => c && 'aeiouäöüy'.includes(c);
-  const isC = c => c && !isV(c);
-  let prevLongV = false;
-  let i = 0;
-  function vowelSym(c, pos) {
-    const n1 = w[pos + 1] || '', n2 = w[pos + 2] || '';
-    const um = c === 'ä' || c === 'ö' || c === 'ü';
-    const SH = um ? { ä: 'ɛ', ö: 'œ', ü: 'ʏ' } : { a: 'a', e: 'ɛ', i: 'ɪ', o: 'ɔ', u: 'ʊ' };
-    const LO = um ? { ä: 'ɛː', ö: 'øː', ü: 'yː' } : { a: 'aː', e: 'eː', i: 'iː', o: 'oː', u: 'uː' };
-    if (n1 === 'h') return [LO[c], 2];
-    if (n1 === c) return [LO[c], 2];
-    if (isC(n1)) {
-      if (n2 === n1) return [SH[c], 1];
-      if (!n2 || isV(n2)) return [LO[c], 1];
-      if ('bdg'.includes(n1)) return [LO[c], 1]; // sagt, liebt → 长音
-      return [SH[c], 1];
-    }
-    if (!n1) return [LO[c], 1];
-    return [SH[c], 1];
-  }
-  const DBL = { b: 'b', d: 'd', f: 'f', g: 'g', l: 'l', m: 'm', n: 'n', p: 'p', r: 'ʁ', s: 's', t: 't' };
-  while (i < N) {
-    const c = w[i], n1 = w[i + 1] || '';
-    prevLongV = false;
-    if (c === 'e' && n1 === 'r' && i + 2 === N) {
-      const hasV = /[aeiouäöüy]/.test(w.slice(0, i));
-      out.push.apply(out, hasV ? ['ɐ'] : ['eː', 'ɐ']);
-      i += 2; continue;
-    }
-    if (c === 'e' && n1 === 'n' && i + 2 === N) { out.push('ə'); i += 1; continue; }
-    if (c === 'e' && i + 1 === N) { out.push('ə'); i += 1; continue; }
-    if (w.startsWith('sch', i)) { out.push('ʃ'); i += 3; continue; }
-    if (w.startsWith('dsch', i)) { out.push('dʒ'); i += 4; continue; }
-    if (w.startsWith('tsch', i)) { out.push('tʃ'); i += 4; continue; }
-    if (w.startsWith('chs', i)) { out.push('k', 's'); i += 3; continue; }
-    if (w.startsWith('tz', i)) { out.push('ts'); i += 2; continue; }
-    if (w.startsWith('dt', i)) { out.push('t'); i += 2; continue; }
-    if (w.startsWith('ei', i)) { out.push('aɪ'); i += 2; prevLongV = true; continue; }
-    if (w.startsWith('au', i)) { out.push('aʊ'); i += 2; prevLongV = true; continue; }
-    if (w.startsWith('eu', i) || w.startsWith('äu', i)) { out.push('ɔʏ'); i += 2; prevLongV = true; continue; }
-    if (w.startsWith('ie', i)) { out.push('iː'); i += 2; prevLongV = true; continue; }
-    if (w.startsWith('ch', i)) { out.push('aou'.includes(w[i - 1] || '') ? 'x' : 'ç'); i += 2; continue; }
-    if (w.startsWith('ck', i)) { out.push('k'); i += 2; continue; }
-    if (w.startsWith('ng', i)) { out.push('ŋ'); i += 2; continue; }
-    if (w.startsWith('nk', i)) { out.push('ŋ', 'k'); i += 2; continue; }
-    if (w.startsWith('qu', i)) { out.push('k', 'v'); i += 2; continue; }
-    if (w.startsWith('ph', i)) { out.push('f'); i += 2; continue; }
-    if (w.startsWith('ig', i) && i + 2 === N) { out.push('ɪ', 'ç'); i += 2; continue; }
-    if (n1 === c && DBL[c]) { out.push(DBL[c]); i += 2; continue; }
-    if (c === 's' && (n1 === 'p' || n1 === 't') && (i === 0 || isC(w[i - 1]))) { out.push('ʃ', n1); i += 2; continue; }
-    if ('aeiouäöü'.includes(c)) {
-      const vs = vowelSym(c, i);
-      out.push(vs[0]);
-      if (vs[0].includes('ː')) prevLongV = true;
-      i += vs[1];
-      continue;
-    }
-    switch (c) {
-      case 'b': out.push((!n1 || 'tds'.includes(n1)) ? 'p' : 'b'); break;
-      case 'd': out.push((!n1 || 'ts'.includes(n1)) ? 't' : 'd'); break;
-      case 'g': out.push((!n1 || 'tds'.includes(n1)) ? 'k' : 'g'); break;
-      case 'r': out.push(((!n1 || isC(n1)) && prevLongV) ? 'ɐ' : 'ʁ'); break;
-      case 's': out.push(((i === 0 && isV(n1)) || (isV(w[i - 1]) && isV(n1))) ? 'z' : 's'); break;
-      case 'ß': out.push('s'); break;
-      case 'z': out.push('ts'); break;
-      case 'x': out.push('k', 's'); break;
-      case 'c': out.push('eiä'.includes(n1) ? 'ts' : 'k'); break;
-      case 'v': out.push('f'); break;
-      case 'w': out.push('v'); break;
-      case 'j': out.push('j'); break;
-      case 'y': out.push('ʏ'); break;
-      case 'h': out.push('h'); break;
-      default: out.push(c);
-    }
-    i += 1;
-  }
-  return out;
-}
-
 /* 音素符号：防御性读取（不同接口版本字段形态有差异） */
 function phonemeSym(p) {
   return (p && (p.Phoneme || p.phoneme)) || '';
@@ -4660,9 +4608,11 @@ function renderResult(pa, recognized, skipScroll) {
   const isEn = learnLang === 'en' || learnLang === 'en-GB';
   let wordsHtml = '';
   const words = (pa.detailResult && pa.detailResult.Words) || [];
+  const weakWords = [];
   words.forEach((w, i) => {
     const winfo = w.PronunciationAssessment || {};
     const score = Math.round(winfo.AccuracyScore || 0);
+    if (w.Word && score < 80) weakWords.push(w.Word + ' (' + score + '分)');
     const err = winfo.ErrorType || 'None';
     const cls = err === 'None' ? 'ok'
       : err === 'Mispronunciation' ? 'bad'
@@ -4670,21 +4620,14 @@ function renderResult(pa, recognized, skipScroll) {
       : err === 'Insertion' ? 'ins' : 'warn';
     let ph = '';
     const phList = w.Phonemes || [];
-    // 德语 Azure 不给音素名 → 用发音规则估算（数量对得上才用，仅德语）；英语直接返回真实 IPA
-    let est = null;
-    if (learnLang === 'de' && phList.length && !phList.some(phonemeSym)) {
-      const g = germanG2P(w.Word);
-      if (g && g.length === phList.length) est = g;
-    }
-    phList.forEach((p, pi) => {
+    phList.forEach((p) => {
       const ps = Math.round((p.PronunciationAssessment && p.PronunciationAssessment.AccuracyScore) || 0);
-      const pc = phonemeSym(p) || (est ? est[pi] : '');
-      const isEst = !phonemeSym(p) && !!est;
+      const pc = phonemeSym(p);
       const pcls = ps >= 80 ? 'ok' : ps >= 60 ? 'warn' : 'bad';
       const heard = phonemeHeard(p);
       const showHeard = heard && heard !== pc && ps < 80;
       ph += '<span class="ph ' + pcls + '">' +
-        (pc ? '<b' + (isEst ? ' class="est" title="' + t('rec.phEstTitle', { lang: learnLangName() }) + '"' : '') + ' data-sym="' + esc(pc) + '" style="cursor:pointer" title="點擊查看口型圖解">' + esc(pc) + '</b>' : '') +
+        (pc ? '<b data-sym="' + esc(pc) + '" style="cursor:pointer" title="點擊查看口型圖解">' + esc(pc) + '</b>' : '') +
         '<small>' + ps + '</small>' +
         (showHeard ? '<i>' + t('rec.heardAs', { sym: esc(heard) }) + '</i>' : '') +
         '</span>';
@@ -4693,7 +4636,7 @@ function renderResult(pa, recognized, skipScroll) {
       esc(w.Word || '') + '<small>' + score + '</small></button>' +
       '<div class="phs hidden" id="phs-' + i + '">' + (ph || '<span class="hint">' + t('rec.noPhDetail') + '</span>') + '</div></div>';
   });
-  const phNote = isEn ? t('rec.phNoteReal') : learnLang === 'de' ? t('rec.phNoteEst') : '';
+  const phNote = isEn ? t('rec.phNoteReal') : '';
   card.innerHTML =
     '<div class="score-row">' +
     '<svg class="ring" viewBox="0 0 120 120"><circle cx="60" cy="60" r="54" class="ring-bg"/>' +
@@ -4712,8 +4655,12 @@ function renderResult(pa, recognized, skipScroll) {
       const text = $('sentenceText').value.trim();
       if (!text) return;
       if (typeof addReviewItem === 'function') {
+        const autoNote = weakWords.length
+          ? '🎯 重點糾音詞：' + weakWords.join('、')
+          : (typeof extractSentenceNotes === 'function' ? extractSentenceNotes(text) : '✅ 發音達標語塊（' + overall + ' 分）');
         await addReviewItem({
           text: text,
+          translation: autoNote,
           context: '實戰跟讀 · 評分 ' + overall + ' 分',
           score: overall,
           type: 'sentence'
@@ -4738,6 +4685,9 @@ function renderResult(pa, recognized, skipScroll) {
   if (!skipScroll && overall >= 75) {
     if (typeof markDailyQuest === 'function') markDailyQuest('chat');
     if (typeof addProgressionXp === 'function') addProgressionXp(10, '發音評分達標');
+  }
+  if (!skipScroll && typeof window.completeReviewVoiceAssessment === 'function') {
+    if (window.completeReviewVoiceAssessment(overall, acc, flu)) return;
   }
   if (!skipScroll) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }

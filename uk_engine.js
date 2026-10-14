@@ -366,6 +366,9 @@ const DEFAULT_UK_REVIEWS = [
 let reviewsCache = [];
 let activeReviewItem = null;
 let reviewAutoTimer = null;
+let pendingReviewAssessmentId = null;
+let phrasebookRenderLimit = 50;
+let phrasebookSearchQuery = '';
 
 async function idbReviewGetAll() {
   try {
@@ -455,10 +458,14 @@ function persistReviewsCache(clearFirst = false) {
 async function addReviewItem({ text, translation, context, type, stage, score }) {
   if (!text || !text.trim()) return;
   const cleanText = text.trim();
+  const resolvedTrans = (translation && translation.trim())
+    ? translation.trim()
+    : (typeof extractSentenceNotes === 'function' ? extractSentenceNotes(cleanText) : '');
   let existing = reviewsCache.find(r => r.text.toLowerCase() === cleanText.toLowerCase());
   if (existing) {
     existing.dueDate = Date.now();
     if (score) existing.lastScore = score;
+    if (!existing.translation && resolvedTrans) existing.translation = resolvedTrans;
     persistReviewsCache();
     renderReviewStudio();
     return existing;
@@ -466,7 +473,7 @@ async function addReviewItem({ text, translation, context, type, stage, score })
   const newItem = {
     id: 'rev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     text: cleanText,
-    translation: translation || '',
+    translation: resolvedTrans,
     context: context || '自主標記語塊',
     type: type || 'sentence',
     stage: stage || 1,
@@ -593,6 +600,8 @@ function renderActiveReviewCard(item) {
   const d2 = calcNextReview(item, 2).interval;
   const d3 = calcNextReview(item, 3).interval;
   const d4 = calcNextReview(item, 4).interval;
+  const fallbackNote = (typeof extractSentenceNotes === 'function') ? extractSentenceNotes(item.text) : '';
+  const displayTrans = item.translation || fallbackNote || '（點擊右側「編輯筆記」可自訂中文釋義與重點提示）';
 
   container.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -602,7 +611,10 @@ function renderActiveReviewCard(item) {
     <div class="flashcard-box" id="flashcardBox">
       <div class="flashcard-text">${esc(item.text)}</div>
       <div class="flashcard-trans hidden" id="flashcardTrans">
-        <p style="margin:0 0 6px;color:#334155;font-weight:500">${esc(item.translation || '（點擊查詞或自測查看釋義）')}</p>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:6px">
+          <p id="flashcardTransText" style="margin:0;color:#334155;font-weight:500;flex:1">${esc(displayTrans)}</p>
+          <button class="btn-sm" id="editCardTransBtn" type="button" style="flex:none;font-size:11px;padding:2px 6px">✏️ 編輯筆記</button>
+        </div>
         <div class="phoneme-buttons-wrap" style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px"></div>
       </div>
     </div>
@@ -611,14 +623,14 @@ function renderActiveReviewCard(item) {
       <button id="reviewFlipBtn" type="button">👁️ 翻轉查看釋義</button>
       <button id="reviewPracticeBtn" type="button">${isOffline ? '🚇 離線自評' : '🎙️ 智能發音自測'}</button>
     </div>
-    <div id="reviewAssessmentResult" class="hidden" style="margin:8px 0;padding:10px;background:#fff;border-radius:10px;border:1px solid #e2e8f0"></div>
+    <div id="reviewAssessmentResult" class="hidden" style="margin:8px 0;padding:10px;background:#f8fafc;border-radius:10px;border:1px solid #cbd5e1"></div>
     <div class="smart-rating-row" id="smartRatingRow">
       <button class="rating-btn rec-bad" id="rateBtn1" type="button">🔴 忘記 (Again)<br><small>${d1}天</small></button>
       <button class="rating-btn rec-hard" id="rateBtn2" type="button">🟠 勉強 (Hard)<br><small>${d2}天</small></button>
       <button class="rating-btn rec-good" id="rateBtn3" type="button">🟢 良好 (Good)<br><small>${d3}天</small></button>
       <button class="rating-btn rec-master" id="rateBtn4" type="button">🔵 熟練 (Easy)<br><small>${d4}天</small></button>
     </div>
-    <div id="reviewCountdownNotice" class="hint" style="text-align:center;margin-top:6px;height:18px"></div>
+    <div id="reviewCountdownNotice" class="hint" style="text-align:center;margin-top:6px;min-height:18px"></div>
   `;
 
   // Safely inject phoneme buttons via DOM API to eliminate inline script injection
@@ -634,11 +646,29 @@ function renderActiveReviewCard(item) {
           btn.style.cssText = 'border-color:#c4b5fd;color:#7c3aed;margin-right:6px;margin-top:4px';
           btn.textContent = `👅 口型圖 /${ph}/`;
           btn.type = 'button';
-          btn.onclick = () => showPhoneticModal(ph, item.text);
+          btn.onclick = (e) => { e.stopPropagation(); showPhoneticModal(ph, item.text); };
           btnWrap.appendChild(btn);
         }
       });
     }
+  }
+
+  const editBtn = document.getElementById('editCardTransBtn');
+  if (editBtn) {
+    editBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (typeof promptDlg === 'function') {
+        const nextVal = await promptDlg('編輯閃卡背面釋義／筆記', item.translation || fallbackNote || '');
+        if (nextVal !== null) {
+          item.translation = nextVal.trim();
+          persistReviewsCache();
+          renderActiveReviewCard(item);
+          const tr = document.getElementById('flashcardTrans');
+          if (tr) tr.classList.remove('hidden');
+          renderPhrasebookList();
+        }
+      }
+    };
   }
 
   document.getElementById('reviewHearBtn').onclick = () => playUkVoice(item.text);
@@ -664,14 +694,94 @@ async function startReviewVoiceAssessment(item) {
     playUkVoice(item.text);
     return;
   }
+  pendingReviewAssessmentId = item.id;
   const stBox = document.getElementById('sentenceText');
-  if (stBox) stBox.value = item.text;
-  
+  if (stBox) {
+    stBox.value = item.text;
+    if (typeof autoGrowTextarea === 'function') autoGrowTextarea(stBox);
+  }
+
   switchTab('practice');
+  const rh = document.getElementById('recHint');
+  if (rh) {
+    rh.textContent = '🎯 智能重溫自測模式：請點擊「開始錄音 (D)」朗讀，完成評分後將自動返回閃卡並智能評級！';
+  }
+  const recCard = document.getElementById('recordCard');
+  if (recCard) {
+    setTimeout(() => recCard.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120);
+  }
   if (typeof genRefAudio === 'function') {
     genRefAudio(item.text, true).catch(() => {});
   }
 }
+
+window.completeReviewVoiceAssessment = function(overallScore, accScore, fluScore) {
+  if (!pendingReviewAssessmentId) return false;
+  const targetId = pendingReviewAssessmentId;
+  pendingReviewAssessmentId = null;
+
+  const item = reviewsCache.find(r => r.id === targetId) || activeReviewItem;
+  if (!item) return false;
+
+  const rating = overallScore >= 85 ? 4 : overallScore >= 70 ? 3 : overallScore >= 55 ? 2 : 1;
+  const ratingLabels = {
+    1: '🔴 忘記 (Again)',
+    2: '🟠 勉強 (Hard)',
+    3: '🟢 良好 (Good)',
+    4: '🔵 熟練 (Easy)'
+  };
+
+  switchTab('review');
+  activeReviewItem = item;
+  renderActiveReviewCard(item);
+
+  const transEl = document.getElementById('flashcardTrans');
+  if (transEl) transEl.classList.remove('hidden');
+
+  const resBox = document.getElementById('reviewAssessmentResult');
+  const noticeEl = document.getElementById('reviewCountdownNotice');
+  const recBtn = document.getElementById('rateBtn' + rating);
+  if (recBtn) {
+    recBtn.style.boxShadow = '0 0 0 2px #7c3aed';
+  }
+
+  if (resBox) {
+    resBox.classList.remove('hidden');
+    resBox.innerHTML = '';
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap';
+    const info = document.createElement('div');
+    info.style.cssText = 'font-size:13px;color:#1e293b';
+    info.innerHTML = `🎙️ 自測總分：<b style="color:#7c3aed;font-size:15px">${overallScore}</b> 分（準確 ${accScore || overallScore} · 流暢 ${fluScore || overallScore}）➔ 建議評級：<b>${ratingLabels[rating]}</b>`;
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'btn-sm';
+    cancelBtn.type = 'button';
+    cancelBtn.textContent = '⏸️ 取消自動翻頁';
+    cancelBtn.onclick = () => {
+      if (reviewAutoTimer) {
+        clearTimeout(reviewAutoTimer);
+        reviewAutoTimer = null;
+      }
+      if (noticeEl) noticeEl.textContent = '已暫停自動翻頁，請手動點擊上方評級按鈕。';
+      cancelBtn.remove();
+    };
+    row.appendChild(info);
+    row.appendChild(cancelBtn);
+    resBox.appendChild(row);
+  }
+
+  if (noticeEl) {
+    noticeEl.textContent = `⏱️ 2.5 秒後將自動以「${ratingLabels[rating]}」排程並進入下一張…`;
+  }
+
+  if (reviewAutoTimer) clearTimeout(reviewAutoTimer);
+  reviewAutoTimer = setTimeout(() => {
+    reviewAutoTimer = null;
+    applyReviewRating(item, rating, overallScore);
+  }, 2500);
+
+  return true;
+};
 
 function applyReviewRating(item, rating, score) {
   if (reviewAutoTimer) { clearTimeout(reviewAutoTimer); reviewAutoTimer = null; }
@@ -700,8 +810,22 @@ function renderPhrasebookList() {
     container.innerHTML = '<div class="hint">您的語塊本還是空的。精讀或對話時，點擊「加入重溫」即可收錄。</div>';
     return;
   }
+  const q = (phrasebookSearchQuery || '').trim().toLowerCase();
+  const filtered = q
+    ? reviewsCache.filter(item =>
+        (item.text && item.text.toLowerCase().includes(q)) ||
+        (item.translation && item.translation.toLowerCase().includes(q)) ||
+        (item.context && item.context.toLowerCase().includes(q))
+      )
+    : reviewsCache;
+
   container.innerHTML = '';
-  reviewsCache.slice(0, 50).forEach(item => {
+  if (!filtered.length) {
+    container.innerHTML = '<div class="hint">找不到符合搜尋條件的語塊。</div>';
+    return;
+  }
+
+  filtered.slice(0, phrasebookRenderLimit).forEach(item => {
     const isMaster = (item.reps || 0) >= 3;
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #f1f5f9';
@@ -745,6 +869,22 @@ function renderPhrasebookList() {
     row.appendChild(actions);
     container.appendChild(row);
   });
+
+  if (filtered.length > phrasebookRenderLimit) {
+    const moreWrap = document.createElement('div');
+    moreWrap.style.cssText = 'text-align:center;padding:10px 0 4px';
+    const moreBtn = document.createElement('button');
+    moreBtn.className = 'ghost-btn';
+    moreBtn.type = 'button';
+    moreBtn.style.cssText = 'font-size:13px;padding:6px 16px';
+    moreBtn.textContent = `⬇️ 載入更多（尚有 ${filtered.length - phrasebookRenderLimit} 筆語塊）`;
+    moreBtn.onclick = () => {
+      phrasebookRenderLimit += 50;
+      renderPhrasebookList();
+    };
+    moreWrap.appendChild(moreBtn);
+    container.appendChild(moreWrap);
+  }
 }
 
 function exportToAnki() {
@@ -837,10 +977,139 @@ function importReviewsJson(file) {
   reader.readAsText(file);
 }
 
-/* ================= 英國在地化：長文沉浸精讀工作室 (Reading Studio) ================= */
+/* ================= 英國在地化：長文沉浸精讀工作室與內建英式詞庫 (Reading Studio & UK Glossary) ================= */
 
 let currentReadingSentences = [];
 let ukReadingPresets = [];
+
+const UK_GLOSSARY = {
+  'landlord': { ipa: '/ˈlæn.lɔːd/', def: '房東、業主（英國租屋核心詞，注意詞尾 r 不捲舌）' },
+  'letting': { ipa: '/ˈlet.ɪŋ/', def: '出租、租賃（Letting agent = 地產租務代理）' },
+  'agent': { ipa: '/ˈeɪ.dʒənt/', def: '代理人、仲介（Estates / Letting agent）' },
+  'tenancy': { ipa: '/ˈten.ən.si/', def: '租約、租期（Assured Shorthold Tenancy, AST）' },
+  'deposit': { ipa: '/dɪˈpɒz.ɪt/', def: '按金、押金（須存入政府認可 DPS/TDS 保護計畫）' },
+  'scheme': { ipa: '/skiːm/', def: '計畫、方案（英音讀 /skiːm/，注意長元音 /iː/）' },
+  'certificate': { ipa: '/səˈtɪf.ɪ.kət/', def: '證書、證明（如 Gas Safety / EPC 能源證書）' },
+  'gas': { ipa: '/ɡæs/', def: '煤氣、天然氣（英國家居供暖與熱水主要能源）' },
+  'energy': { ipa: '/ˈen.ə.dʒi/', def: '能源、電力與燃氣（Ofgem 監管）' },
+  'performance': { ipa: '/pəˈfɔː.məns/', def: '效能、表現（EPC = Energy Performance Certificate）' },
+  'confirmation': { ipa: '/ˌkɒn.fəˈmeɪ.ʃən/', def: '確認函、證明書（注意首音節英音短 o /ɒ/）' },
+  'government': { ipa: '/ˈɡʌv.ən.mənt/', def: '政府（GOV.UK 官方公共服務網）' },
+  'approved': { ipa: '/əˈpruːvd/', def: '經核准的、官方認可的' },
+  'gp': { ipa: '/ˌdʒiːˈpiː/', def: '全科家庭醫生 (General Practitioner，NHS 看診第一站)' },
+  'surgery': { ipa: '/ˈsɜː.dʒər.i/', def: '診所、門診部（英式用法：GP surgery 指家庭醫生診所）' },
+  'triage': { ipa: '/ˈtriː.ɑːʒ/', def: '分診、病情輕重評估（NHS 8:00 AM 電話預約必經流程）' },
+  'appointment': { ipa: '/əˈpɔɪnt.mənt/', def: '預約、門診掛號（book an appointment）' },
+  'prescription': { ipa: '/prɪˈskrɪp.ʃən/', def: '醫生處方箋（可憑單至 Boots 或 Chemist 領藥）' },
+  'paracetamol': { ipa: '/ˌpær.əˈsiː.tə.mɒl/', def: '撲熱息痛（英國最常用止痛退燒藥，美式稱 acetaminophen）' },
+  'chemist': { ipa: '/ˈkem.ɪst/', def: '藥房、藥劑師（英式日常用語，等同 pharmacy）' },
+  'pharmacy': { ipa: '/ˈfɑː.mə.si/', def: '藥房（NHS 輕症可先諮詢社區藥房 Pharmacist）' },
+  'emergency': { ipa: '/ɪˈmɜː.dʒən.si/', def: '緊急情況、急症（A&E = Accident and Emergency 急症室）' },
+  'symptom': { ipa: '/ˈsɪmp.təm/', def: '症狀、病徵' },
+  'council': { ipa: '/ˈkaʊn.səl/', def: '地方市政廳（負責市政稅 Council Tax、垃圾回收與社區服務）' },
+  'tax': { ipa: '/tæks/', def: '稅項（Council Tax 按房屋估值 Band A–H 徵收）' },
+  'discount': { ipa: '/ˈdɪs.kaʊnt/', def: '折扣（獨居成人可申請 25% Single Person Discount）' },
+  'wheelie': { ipa: '/ˈwiː.li/', def: '帶輪子的（wheelie bin = 英式家門口的輪式分類垃圾桶）' },
+  'bin': { ipa: '/bɪn/', def: '垃圾桶（注意短元音 /ɪ/，切勿讀成長音 /iː/）' },
+  'collection': { ipa: '/kəˈlek.ʃən/', def: '收集、清運（bin collection day = 垃圾清運日）' },
+  'tariff': { ipa: '/ˈtær.ɪf/', def: '水電煤氣收費標準、資費方案（Fixed vs Variable tariff）' },
+  'standing': { ipa: '/ˈstæn.dɪŋ/', def: '固定的（standing charge = 每日固定基本服務費）' },
+  'charge': { ipa: '/tʃɑːdʒ/', def: '收費、費用（英音長元音 /ɑː/，不捲舌）' },
+  'cap': { ipa: '/kæp/', def: '上限（Ofgem Energy Price Cap = 英國能源價格上限）' },
+  'meter': { ipa: '/ˈmiː.tə/', def: '電錶、煤氣錶（smart meter = 智能電錶；submit meter reading）' },
+  'debit': { ipa: '/ˈdeb.ɪt/', def: '扣款（Direct Debit = 銀行自動轉帳扣款，英國繳費最優惠方式）' },
+  'inflation': { ipa: '/ɪnˈfleɪ.ʃən/', def: '通貨膨脹（CPI 通脹率）' },
+  'interest': { ipa: '/ˈɪn.trəst/', def: '利息、利率（Bank of England Base Rate 央行基準利率）' },
+  'mortgage': { ipa: '/ˈmɔː.ɡɪdʒ/', def: '房屋按揭貸款（注意 t 不發音，讀 /ˈmɔː.ɡɪdʒ/）' },
+  'chancellor': { ipa: '/ˈtʃɑːn.səl.ə/', def: '英國財政大臣（Chancellor of the Exchequer）' },
+  'household': { ipa: '/ˈhaʊs.həʊld/', def: '家庭、住戶（英音雙元音 /əʊ/）' },
+  'budget': { ipa: '/ˈbʌdʒ.ɪt/', def: '預算、財政預算案' },
+  'pint': { ipa: '/paɪnt/', def: '品脫（英國酒吧點啤酒標準容量 ≈ 568ml：a pint of lager）' },
+  'round': { ipa: '/raʊnd/', def: '一輪酒（英國 Pub 文化：It\'s my round = 這輪我請客）' },
+  'bar': { ipa: '/bɑː/', def: '吧台（英國 Pub 傳統需自行去吧台點單付款，不設桌邊點菜）' },
+  'queue': { ipa: '/kjuː/', def: '排隊（在英國 Pub 吧台是橫向展開等候，不排單行直線）' },
+  'bartender': { ipa: '/ˈbɑːˌten.də/', def: '吧台調酒師、酒保（英國亦常稱 barman / barmaid / bar staff）' },
+  'contactless': { ipa: '/ˈkɒn.tækt.ləs/', def: '感應式拍卡支付（Apple Pay / 銀行卡拍卡）' },
+  'cheers': { ipa: '/tʃɪəz/', def: '乾杯／謝謝／再見（極高頻英式萬用口頭禪）' },
+  'mate': { ipa: '/meɪt/', def: '朋友、老兄（英式親切稱呼：Cheers mate!）' },
+  'cuppa': { ipa: '/ˈkʌp.ə/', def: '一杯茶 (a cup of tea，英式日常俚語：Fancy a cuppa?)' },
+  'knackered': { ipa: '/ˈnæk.əd/', def: '筋疲力盡、累垮了（極地道英式口語，等同 exhausted）' },
+  'gutted': { ipa: '/ˈɡʌt.ɪd/', def: '極度失望、心碎（英式高頻俚語）' },
+  'boiler': { ipa: '/ˈbɔɪ.lə/', def: '家用暖氣與熱水鍋爐（combi-boiler 故障屬緊急維修）' },
+  'mould': { ipa: '/məʊld/', def: '霉菌、黑霉（英式拼法 mould；damp and mould 潮濕發霉）' },
+  'damp': { ipa: '/dæmp/', def: '潮濕、濕氣' },
+  'fridge': { ipa: '/frɪdʒ/', def: '雪櫃、冰箱' },
+  'water': { ipa: '/ˈwɔː.tə/', def: '水（標準 RP 讀 /ˈwɔː.tə/；倫敦日常口語常帶喉塞音 /ˈwɔː.ʔə/）' },
+  'bottle': { ipa: '/ˈbɒt.əl/', def: '瓶子（注意首音節英音短 o /ɒ/ 及詞尾 Dark L [ɫ]）' }
+};
+
+function lookupUkWord(rawWord, contextSentence) {
+  const clean = String(rawWord || '').replace(/[^a-zA-Z'-]/g, '').trim();
+  const lower = clean.toLowerCase();
+  const candidates = [
+    lower,
+    lower.replace(/(?:s|es|ed|ing|ly)$/, ''),
+    lower.replace(/ies$/, 'y')
+  ];
+  for (const c of candidates) {
+    if (UK_GLOSSARY[c]) {
+      const entry = UK_GLOSSARY[c];
+      const ctxPart = contextSentence ? ` · 原句：「${contextSentence.slice(0, 90)}${contextSentence.length > 90 ? '…' : ''}」` : '';
+      return {
+        ipa: entry.ipa,
+        def: entry.def,
+        fullTranslation: `${entry.ipa} ${entry.def}${ctxPart}`
+      };
+    }
+  }
+
+  // Automatic UK phonetic feature hints when word is not in core glossary
+  const hints = [];
+  if (lower.includes('th')) hints.push('含咬舌音 /θ/ 或 /ð/（舌尖輕觸上下齒間）');
+  if (/(?:er|or|ar|re)s?$/.test(lower)) hints.push('英音詞尾不捲舌，讀央元音 /ə/');
+  if (/[^aeiou]l(?:e|s|d)?$/.test(lower)) hints.push('詞尾含英式 Dark L [ɫ]（舌根向軟顎微抬）');
+  if (/\b(?:hot|lot|not|got|cost|stop|shop|clock|box|job|spot|on|off)\b/.test(lower)) hints.push('含英式圓唇短元音 /ɒ/');
+  if (/[aeiou]t[aeiou]/.test(lower)) hints.push('母音間 /t/ 英音保持清脆或發喉塞音 /ʔ/，勿美式彈舌');
+
+  const phSummary = hints.length ? hints.join('；') : '🇬🇧 標準英式發音語塊（RP / Modern British）';
+  const ctxText = contextSentence
+    ? `📖 語境例句：「${contextSentence.slice(0, 100)}${contextSentence.length > 100 ? '…' : ''}」`
+    : '點擊「✏️ 編輯筆記」可補充自訂中文解釋';
+
+  return {
+    ipa: '🇬🇧 英音發音要點',
+    def: `${phSummary}。${ctxText}`,
+    fullTranslation: `【${phSummary}】${ctxText}`
+  };
+}
+
+function extractSentenceNotes(sent) {
+  if (!sent) return '';
+  const words = String(sent).split(/[^a-zA-Z'-]+/).filter(Boolean);
+  const matched = [];
+  const seen = new Set();
+  for (const w of words) {
+    const lower = w.toLowerCase();
+    const stem = lower.replace(/(?:s|es|ed|ing)$/, '');
+    const key = UK_GLOSSARY[lower] ? lower : (UK_GLOSSARY[stem] ? stem : null);
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      matched.push(`${w} ${UK_GLOSSARY[key].ipa}：${UK_GLOSSARY[key].def.split('（')[0]}`);
+      if (matched.length >= 3) break;
+    }
+  }
+  if (matched.length) {
+    return '📌 核心詞彙：' + matched.join(' ｜ ');
+  }
+  const phHints = [];
+  if (/\b\w*th\w*\b/i.test(sent)) phHints.push('注意 th 咬舌音 /θ, ð/');
+  if (/\b\w+[aeiou]r\s+[aeiou]/i.test(sent)) phHints.push('含英式連讀 Linking R (‿r)');
+  if (/\b\w+l\b/i.test(sent)) phHints.push('注意詞尾 Dark L [ɫ]');
+  return phHints.length
+    ? '🎙️ 發音重點：' + phHints.join(' · ')
+    : '🇬🇧 英式生活地道語塊（可點擊「✏️ 編輯筆記」新增個人翻譯）';
+}
+window.extractSentenceNotes = extractSentenceNotes;
 
 async function loadReadingPresets() {
   try {
@@ -972,6 +1241,7 @@ function renderReadingStudio(sentences) {
     item.querySelector('#rd-add-' + idx).onclick = async (e) => {
       await addReviewItem({
         text: sent,
+        translation: extractSentenceNotes(sent),
         context: '長文精讀 Chunk ' + (idx + 1),
         type: 'sentence',
         stage: 3
@@ -981,39 +1251,61 @@ function renderReadingStudio(sentences) {
     };
 
     item.querySelectorAll('.rd-word').forEach(wordEl => {
-      wordEl.ondblclick = (e) => {
-        showWordPopover(wordEl.textContent.trim(), e);
+      const openPop = (e) => {
+        e.stopPropagation();
+        showWordPopover(wordEl.textContent.trim(), e, sent);
       };
+      wordEl.onclick = openPop;
+      wordEl.ondblclick = openPop;
     });
 
     container.appendChild(item);
   });
 }
 
-function showWordPopover(word, event) {
+function showWordPopover(word, event, contextSentence) {
   const popover = document.getElementById('wordPopover');
   if (!popover) return;
   const cleanWord = word.replace(/[^a-zA-Z'-]/g, '').slice(0, 50);
   if (!cleanWord) return;
 
+  const info = lookupUkWord(cleanWord, contextSentence);
+
   document.getElementById('popoverWord').textContent = cleanWord;
-  document.getElementById('popoverPh').textContent = '🇬🇧 英式發音與收錄';
-  document.getElementById('popoverDef').textContent = '點擊下方按鈕可直接朗讀或加至生詞重溫本';
+  document.getElementById('popoverPh').textContent = info.ipa;
+  document.getElementById('popoverDef').textContent = info.def;
+
+  const addBtn = document.getElementById('popoverAddBtn');
+  if (addBtn) {
+    addBtn.textContent = '⭐ 加至重溫';
+    addBtn.disabled = false;
+  }
 
   document.getElementById('popoverHearBtn').onclick = () => playUkVoice(cleanWord);
   document.getElementById('popoverAddBtn').onclick = async () => {
     await addReviewItem({
       text: cleanWord,
-      context: '精讀生詞',
+      translation: info.fullTranslation,
+      context: contextSentence ? `精讀語境: ${contextSentence.slice(0, 65)}${contextSentence.length > 65 ? '…' : ''}` : '精讀生詞',
       type: 'collocation',
       stage: 2
     });
-    popover.classList.add('hidden');
+    if (addBtn) {
+      addBtn.textContent = '✅ 已收錄';
+      addBtn.disabled = true;
+    }
+    setTimeout(() => popover.classList.add('hidden'), 450);
   };
   document.getElementById('popoverCloseBtn').onclick = () => popover.classList.add('hidden');
 
-  popover.style.left = Math.min(window.innerWidth - 220, Math.max(10, event.pageX - 80)) + 'px';
-  popover.style.top = (event.pageY + 15) + 'px';
+  const rect = event && event.target && event.target.getBoundingClientRect
+    ? event.target.getBoundingClientRect()
+    : { left: (event && event.clientX) || 100, bottom: (event && event.clientY) || 100 };
+  const pageX = rect.left + window.scrollX;
+  const pageY = rect.bottom + window.scrollY;
+
+  popover.style.left = Math.min(window.innerWidth - 260, Math.max(10, pageX - 40)) + 'px';
+  popover.style.top = (pageY + 8) + 'px';
   popover.classList.remove('hidden');
 }
 
@@ -1089,30 +1381,25 @@ function renderStagesDashboard() {
   const state = getProgressionState();
   const xp = state.xp || 0;
 
-  let level = 1;
-  let maxLevelXp = 300;
-  let levelName = 'Level 1: 英國生存突破 (Survival UK)';
-  let levelDesc = '攻克基礎生活交易，消除開口焦慮。自如應對超市、外賣、郵局與地鐵。';
-  let badgeIcon = '🥉';
+  const level = xp >= 2500 ? 4 : xp >= 1000 ? 3 : xp >= 300 ? 2 : 1;
+  const stageObj = Array.isArray(ukStagesData) ? ukStagesData.find(s => Number(s.level) === level) : null;
 
-  if (xp >= 2500) {
-    level = 4;
-    maxLevelXp = 5000;
-    levelName = 'Level 4: 文化融入與職場自如 (Cultural Fluency)';
-    levelDesc = '融會英式委婉語與幽默自嘲，流暢自如，真正融入在地社區與英倫職場。';
-    badgeIcon = '💎';
-  } else if (xp >= 1000) {
-    level = 3;
-    maxLevelXp = 2500;
-    levelName = 'Level 3: 獨立維權與長文閱讀 (Autonomy & Reading)';
-    levelDesc = '看懂官方規例、長篇合約與租約條款，用堅定而禮貌的英式表達捍衛權益。';
-    badgeIcon = '🥇';
-  } else if (xp >= 300) {
-    level = 2;
-    maxLevelXp = 1000;
-    levelName = 'Level 2: 生活事務自主 (Daily Affairs)';
-    levelDesc = '掌握英國核心行政、GP 醫療、市政稅與水電公務交涉，生活無求於人。';
-    badgeIcon = '🥈';
+  let maxLevelXp = stageObj && stageObj.xpRequired ? stageObj.xpRequired : (level === 4 ? 5000 : level === 3 ? 2500 : level === 2 ? 1000 : 300);
+  let levelName = stageObj ? `Level ${stageObj.level}: ${stageObj.name}` : 'Level 1: 英國生存突破 (Survival UK)';
+  let levelDesc = stageObj ? stageObj.description : '攻克基礎生活交易，消除開口焦慮。自如應對超市、外賣、郵局與地鐵。';
+  let badgeIcon = stageObj ? stageObj.badge : (level === 4 ? '💎' : level === 3 ? '🥇' : level === 2 ? '🥈' : '🥉');
+
+  if (!stageObj) {
+    if (level === 4) {
+      levelName = 'Level 4: 文化融入與職場自如 (Cultural Fluency)';
+      levelDesc = '融會英式委婉語與幽默自嘲，流暢自如，真正融入在地社區與英倫職場。';
+    } else if (level === 3) {
+      levelName = 'Level 3: 獨立維權與長文閱讀 (Autonomy & Reading)';
+      levelDesc = '看懂官方規例、長篇合約與租約條款，用堅定而禮貌的英式表達捍衛權益。';
+    } else if (level === 2) {
+      levelName = 'Level 2: 生活事務自主 (Daily Affairs)';
+      levelDesc = '掌握英國核心行政、GP 醫療、市政稅與水電公務交涉，生活無求於人。';
+    }
   }
 
   const iconEl = document.getElementById('stageBadgeIcon');
@@ -1283,6 +1570,15 @@ function initUkSuite() {
       showPhoneticModal(chip.dataset.ph);
     };
   });
+
+  const pbSearch = document.getElementById('phrasebookSearch');
+  if (pbSearch) {
+    pbSearch.oninput = () => {
+      phrasebookSearchQuery = pbSearch.value || '';
+      phrasebookRenderLimit = 50;
+      renderPhrasebookList();
+    };
+  }
 
   const closePh = document.getElementById('closePhModalBtn');
   if (closePh) closePh.onclick = closePhoneticModal;

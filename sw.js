@@ -3,7 +3,7 @@
  * 策略：本站 GET 请求走网络优先，失败时读缓存；API 与 CDN 请求不拦截。
  * 注意：更新 index.html 后刷新页面即生效，无需手动清缓存。
  */
-const CACHE = 'sprechmate-uk-v4';
+const CACHE = 'sprechmate-uk-v5';
 const ASSETS = [
   './',
   'index.html',
@@ -15,7 +15,6 @@ const ASSETS = [
   'favicon-32.png',
   'icon-192.png',
   'icon-512.png',
-  'uk_prompts.json',
   'uk_reading_presets.json',
   'uk_stages.json',
   'uk_drills.json'

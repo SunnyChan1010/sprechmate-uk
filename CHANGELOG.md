@@ -2,6 +2,27 @@
 
 本專案遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-TW/) 語意化版本規範，並採用 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/) 格式記錄變更。
 
+## [1.3.0] - 2026-10-14
+
+### 🎯 Phase 1 & Phase 2：用戶核心痛點根治與高穩定減法重構 (Pain-Point Resolution & Architecture Simplification)
+- **[P0] 打通 SM-2 閃卡「語音自測 ➔ 自動評分 ➔ 倒數排程」完整閉環**：
+  - 於 `uk_engine.js` 新增 `pendingReviewAssessmentId` 狀態追蹤與 `window.completeReviewVoiceAssessment(overallScore, accScore, fluScore)` 回調，並在 `index.html` 的 `renderResult()` 結尾自動觸發。
+  - 完成錄音評測後自動切回「🧠 智能重溫」分頁、翻開卡片背面、於 `#reviewAssessmentResult` 顯示總分與建議評級（`≥85` 熟練 Easy、`≥70` 良好 Good、`≥55` 勉強 Hard、`<55` 忘記 Again），並啟動 2.5 秒可隨時取消之 `reviewAutoTimer` 自動排程倒數。
+- **[P0] 倫敦地鐵弱網防死鎖（`AbortController` 連線與串流心跳超時保護）**：
+  - `sendChatCore()` 新增 `AbortController` 15 秒初始連線超時與 20 秒 SSE 串流 Chunk 心跳超時，並暴露 `window.abortChatStream()`，徹底解決地鐵／弱網切換下 TCP 半開連線導致 `chatSending` 永久鎖死對話 UI 之問題。
+  - `ttsBlob()` 新增 6 秒 `AbortController` 超時限制，確保弱網下 `playUkVoice()` 與 `genRefAudio()` 於 6 秒內快速降級至離線系統英式語音（`en-GB`），告別 60 秒盲等。
+- **[P1] 精讀工作坊「單擊查詞 + 內建英式生活詞典 + 閃卡背面自動帶入與編輯」**：
+  - 將精讀工作坊 `.rd-word` 由僅支援 `ondblclick` 升級為支援單擊（`onclick`），全面修復手機觸控螢幕無法查詞之問題，並採用 `getBoundingClientRect()` 精準定位彈窗。
+  - 內建 `UK_GLOSSARY`（涵蓋租屋、NHS 醫療、Council Tax、能源帳單、英國央行通脹與 Pub 社交高頻詞彙之英式音標與繁中詳解）、`lookupUkWord()` 與 `extractSentenceNotes()`，使精讀單詞收錄、整句收錄與跟讀弱項收錄自動生成結構化背面釋義，並於閃卡背面新增「✏️ 編輯筆記」按鈕。
+- **[P1] 解除詞庫 50 筆截斷並根除 IndexedDB 全表游標掃描風暴**：
+  - `renderPhrasebookList()` 新增 `#phrasebookSearch` 即時關鍵字過濾（支援英文、中文釋義與語境搜尋）與「⬇️ 載入更多」分批載入機制，解除 `.slice(0, 50)` 硬編碼限制。
+  - 重構 `trimTtsCache()` 與 `ttsFindByTextOtherLocale()`，改用 `store.getAllKeys()` 先在記憶體過濾 `tts:` 鍵名，未超限時**零二進位 Blob 反序列化**，避免每次 TTS 合成觸發全庫讀取 `'json:convs'` 與錄音 Blob 之記憶體風暴。
+- **[P2] 開箱零配置優化、清理德語死代碼與單一事實來源統一**：
+  - `DEFAULTS` 預設 AI 端點與模型更新為 Google Gemini（`gemini-2.5-flash`）；`genRefAudio()` 在未填寫 Azure Key 時平滑降級至瀏覽器內建 `en-GB` 語音朗讀。
+  - 移除 `index.html` 中殘留未使用的 90 行德語發音規則 `germanG2P()` 死代碼，並讓 `renderStagesDashboard()` 直接驅動自 `uk_stages.json`（`ukStagesData`）。
+
+---
+
 ## [1.2.0] - 2026-10-14
 
 ### 🛡️ 應用程式安全、穩定性、效能與架構深度重構 (AppSec & Architecture Hardening)
