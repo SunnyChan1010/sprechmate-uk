@@ -397,6 +397,23 @@ async function idbReviewPut(item) {
   } catch (e) {}
 }
 
+async function idbReviewsSyncBatch(items, clearFirst = false) {
+  try {
+    const db = await idb();
+    if (!db.objectStoreNames.contains('reviews')) return;
+    return new Promise((resolve) => {
+      try {
+        const tx = db.transaction('reviews', 'readwrite');
+        const store = tx.objectStore('reviews');
+        if (clearFirst) store.clear();
+        (items || []).forEach(item => store.put(item));
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => resolve();
+      } catch (e) { resolve(); }
+    });
+  } catch (e) {}
+}
+
 async function idbReviewDel(id) {
   try {
     const db = await idb();
@@ -427,11 +444,11 @@ async function initReviewsStore() {
   persistReviewsCache();
 }
 
-function persistReviewsCache() {
+function persistReviewsCache(clearFirst = false) {
   try {
     localStorage.setItem(LS_REVIEWS, JSON.stringify(reviewsCache));
   } catch (e) {}
-  reviewsCache.forEach(item => { idbReviewPut(item).catch(() => {}); });
+  idbReviewsSyncBatch(reviewsCache, clearFirst).catch(() => {});
   updateDueBadge();
 }
 
@@ -447,7 +464,7 @@ async function addReviewItem({ text, translation, context, type, stage, score })
     return existing;
   }
   const newItem = {
-    id: 'rev_' + Date.now() + '_' + Math.random().toString(36).substr(2, 5),
+    id: 'rev_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     text: cleanText,
     translation: translation || '',
     context: context || '自主標記語塊',
@@ -572,6 +589,10 @@ function renderActiveReviewCard(item) {
   if (reviewAutoTimer) { clearTimeout(reviewAutoTimer); reviewAutoTimer = null; }
 
   const isOffline = !navigator.onLine;
+  const d1 = calcNextReview(item, 1).interval;
+  const d2 = calcNextReview(item, 2).interval;
+  const d3 = calcNextReview(item, 3).interval;
+  const d4 = calcNextReview(item, 4).interval;
 
   container.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
@@ -592,10 +613,10 @@ function renderActiveReviewCard(item) {
     </div>
     <div id="reviewAssessmentResult" class="hidden" style="margin:8px 0;padding:10px;background:#fff;border-radius:10px;border:1px solid #e2e8f0"></div>
     <div class="smart-rating-row" id="smartRatingRow">
-      <button class="rating-btn rec-bad" id="rateBtn1" type="button">🔴 忘記 (Again)<br><small>1天</small></button>
-      <button class="rating-btn rec-hard" id="rateBtn2" type="button">🟠 勉強 (Hard)<br><small>2天</small></button>
-      <button class="rating-btn rec-good" id="rateBtn3" type="button">🟢 良好 (Good)<br><small>4天</small></button>
-      <button class="rating-btn rec-master" id="rateBtn4" type="button">🔵 熟練 (Easy)<br><small>7天</small></button>
+      <button class="rating-btn rec-bad" id="rateBtn1" type="button">🔴 忘記 (Again)<br><small>${d1}天</small></button>
+      <button class="rating-btn rec-hard" id="rateBtn2" type="button">🟠 勉強 (Hard)<br><small>${d2}天</small></button>
+      <button class="rating-btn rec-good" id="rateBtn3" type="button">🟢 良好 (Good)<br><small>${d3}天</small></button>
+      <button class="rating-btn rec-master" id="rateBtn4" type="button">🔵 熟練 (Easy)<br><small>${d4}天</small></button>
     </div>
     <div id="reviewCountdownNotice" class="hint" style="text-align:center;margin-top:6px;height:18px"></div>
   `;
@@ -773,7 +794,9 @@ function importReviewsJson(file) {
   const reader = new FileReader();
   reader.onload = (e) => {
     try {
-      const data = JSON.parse(e.target.result);
+      const data = JSON.parse(e.target.result, (k, v) =>
+        (k === '__proto__' || k === 'constructor' || k === 'prototype') ? undefined : v
+      );
       if (Array.isArray(data.reviews)) {
         reviewsCache = data.reviews.map(r => ({
           id: String(r.id || ('rev_' + Math.random().toString(36).substr(2, 6))),
@@ -791,7 +814,7 @@ function importReviewsJson(file) {
           lastScore: r.lastScore ? Number(r.lastScore) : null,
           history: Array.isArray(r.history) ? r.history.slice(-50) : []
         })).filter(r => r.text.length > 0);
-        persistReviewsCache();
+        persistReviewsCache(true);
       }
       if (data.progression && typeof data.progression === 'object') {
         const p = data.progression;
@@ -808,7 +831,7 @@ function importReviewsJson(file) {
       renderStagesDashboard();
       alertDlg('✅ 進度備份已安全驗證並成功還原！');
     } catch (err) {
-      alertDlg('導入失敗：JSON 格式無效或檔案已損毀');
+      alertDlg('匯入失敗：JSON 格式無效或檔案已損毀');
     }
   };
   reader.readAsText(file);
@@ -879,8 +902,14 @@ function analyzeReadingText(rawText) {
     alertDlg('文章長度過長（超過 50,000 字元），已為您截取前 50,000 字元進行精讀，以確保系統流暢。');
     rawText = rawText.slice(0, 50000);
   }
-  const rawSentences = rawText.match(/[^.!?\n]+[.!?]+(?:\s+|$)|[^.!?\n]+$/g) || [rawText];
-  currentReadingSentences = rawSentences.map(s => s.trim()).filter(s => s.length > 2);
+  const DOT_PLACEHOLDER = '\u0000';
+  const protectedText = rawText
+    .replace(/\b(Mr|Mrs|Ms|Dr|Prof|Sr|Jr|St|Rd|Ave|No|vs|etc|e\.g|i\.e|U\.K|U\.S|a\.m|p\.m)\./gi, (m) => m.replace(/\./g, DOT_PLACEHOLDER))
+    .replace(/(\d)\.(\d)/g, `$1${DOT_PLACEHOLDER}$2`);
+  const rawSentences = protectedText.match(/[^.!?\n]+[.!?]+(?:\s+|$)|[^.!?\n]+$/g) || [protectedText];
+  currentReadingSentences = rawSentences
+    .map(s => s.replaceAll(DOT_PLACEHOLDER, '.').trim())
+    .filter(s => s.length > 0);
 
   const wordCount = rawText.split(/\s+/).filter(Boolean).length;
   document.getElementById('readingWordCount').textContent = `共 ${wordCount} 詞`;
@@ -968,7 +997,7 @@ function showWordPopover(word, event) {
   if (!cleanWord) return;
 
   document.getElementById('popoverWord').textContent = cleanWord;
-  document.getElementById('popoverPh').textContent = '英式發音中...';
+  document.getElementById('popoverPh').textContent = '🇬🇧 英式發音與收錄';
   document.getElementById('popoverDef').textContent = '點擊下方按鈕可直接朗讀或加至生詞重溫本';
 
   document.getElementById('popoverHearBtn').onclick = () => playUkVoice(cleanWord);
@@ -1000,8 +1029,13 @@ function getProgressionState() {
     if (raw) {
       const state = JSON.parse(raw);
       if (state.dailyDate !== today) {
+        const prevMs = Date.parse(state.dailyDate);
+        const currMs = Date.parse(today);
+        const diffDays = !isNaN(prevMs) ? Math.round((currMs - prevMs) / 86400000) : 0;
+        state.streakDays = diffDays === 1 ? (Number(state.streakDays) || 1) + 1 : 1;
         state.dailyDate = today;
         state.quests = { review: false, reading: false, chat: false };
+        saveProgressionState(state);
       }
       return state;
     }
@@ -1024,6 +1058,7 @@ function saveProgressionState(state) {
 function addProgressionXp(xp, reason) {
   const state = getProgressionState();
   state.xp = (state.xp || 0) + xp;
+  state.level = state.xp >= 2500 ? 4 : state.xp >= 1000 ? 3 : state.xp >= 300 ? 2 : 1;
   saveProgressionState(state);
   renderStagesDashboard();
 }
@@ -1033,6 +1068,7 @@ function markDailyQuest(questKey) {
   if (state.quests && !state.quests[questKey]) {
     state.quests[questKey] = true;
     state.xp += 35;
+    state.level = state.xp >= 2500 ? 4 : state.xp >= 1000 ? 3 : state.xp >= 300 ? 2 : 1;
     saveProgressionState(state);
     renderStagesDashboard();
   }
@@ -1252,6 +1288,17 @@ function initUkSuite() {
   if (closePh) closePh.onclick = closePhoneticModal;
   const closePh2 = document.getElementById('phModalCloseBtn');
   if (closePh2) closePh2.onclick = closePhoneticModal;
+  const phModal = document.getElementById('phoneticModal');
+  if (phModal) {
+    phModal.addEventListener('click', (e) => {
+      if (e.target === phModal) closePhoneticModal();
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && phModal && !phModal.classList.contains('hidden')) {
+      closePhoneticModal();
+    }
+  });
 
   const hearPhBtn = document.getElementById('phModalHearBtn');
   if (hearPhBtn) {

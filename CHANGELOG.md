@@ -2,6 +2,35 @@
 
 本專案遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-TW/) 語意化版本規範，並採用 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/) 格式記錄變更。
 
+## [1.2.0] - 2026-10-14
+
+### 🛡️ 應用程式安全、穩定性、效能與架構深度重構 (AppSec & Architecture Hardening)
+- **[Critical] 修復四大核心功能分頁與口型彈窗初始化斷裂**：
+  - 於 `index.html` 的 `init()` 結尾正式掛載 `initUkSuite()`，並引入外部 `<script src="uk_engine.js"></script>`，徹底修復頂部 4 大導航分頁（`#appTabs`）、長文精讀工作室（`initReadingStudio`）、SM-2 智能重溫本（`initReviewsStore`）、4 階晉級儀表板（`loadStagesAndDrills`）與口型解剖彈窗（`#phoneticModal`）關閉按鈕（含背景點擊與 `Escape` 鍵）未綁定之核心阻斷問題。
+- **[High] 修復設定檔匯入安全漏洞與 API 端點驗證**：
+  - `getSettings()` 新增 `azureRegion` 對照 `REGIONS` 白名單校驗，防止透過惡意設定檔篡改 `https://${s.azureRegion}.tts.speech.microsoft.com` 目標網域竊取 `Ocp-Apim-Subscription-Key`。
+  - `getSettings()` 與 `importSettingsFile()` 新增 `chatBaseUrl` HTTPS 協定白名單驗證、10MB 檔案上限攔截、`JSON.parse` 原型鏈污染過濾（`__proto__`、`constructor`、`prototype`），以及當匯入配置變更 `chatBaseUrl` 且未附帶新金鑰時自動清空本地 `chatKey` 之防洩漏保護。
+- **[High] 消除 `showRetryCard()` DOM 型 XSS 注入風險**：
+  - 將 `index.html` 中 `showRetryCard(msg)` 的 `innerHTML` 字串拼接重構為安全 DOM API（`document.createElement` + `textContent`）。
+- **[High] 消除 1,382 行重複代碼與全域雜湊函式命名衝突**：
+  - 移除 `index.html` 內嵌與 `uk_engine.js` 完全重複的 1,382 行代碼，統一由 `uk_engine.js` 模組化載入。
+  - 移除 `index.html` 中未使用的第一處 `hashStr(s)`（FNV-1a）重複宣告，保留與 TTS 快取鍵值相容之 DJB2 base36 `hashStr(s)` 實作。
+- **[High] 修復 Service Worker (`sw.js`) 快取污染與離線資源回退錯誤**：
+  - 升級快取版本至 `sprechmate-uk-v4`，將 `uk_engine.js` 與 `favicon-32.png` 納入預快取清單 `ASSETS`。
+  - 新增 `res && res.ok && res.status === 200` 檢查，防止將 HTTP 4xx/5xx 錯誤回應寫入持久化快取。
+  - 離線回退邏輯改為僅在 `e.request.mode === 'navigate'` 時回退至 `index.html`，避免非頁面請求（`.json`、`.js`、圖片）離線時收到 HTML 導致解析崩潰。
+- **[High] 補齊音訊 `ObjectURL` 生命週期釋放**：
+  - 修復 `downloadRefAudio()` 與 `testTts()` 中 `URL.createObjectURL(blob)` 未配對呼叫 `URL.revokeObjectURL()` 之記憶體洩漏，並將測試語句改為英式英語示範句。
+- **[Medium] 修復 IndexedDB 批次寫入 (N+1 交易風暴)、SM-2 預覽天數、長文斷句與進度連勝邏輯**：
+  - 新增 `idbReviewsSyncBatch(items, clearFirst)`，將 `persistReviewsCache()` 的 N 次獨立 IndexedDB 交易合併為單一 `readwrite` 批次交易，並在匯入備份時支援先清空舊紀錄。
+  - `renderActiveReviewCard()` 改為透過 `calcNextReview(item, r).interval` 動態計算並顯示真實預覽天數（取代寫死的 `1天 / 2天 / 4天 / 7天`）。
+  - `analyzeReadingText()` 新增常見英文縮寫（`Mr.`, `Dr.`, `U.K.`, `e.g.` 等）與小數點保護機制，避免長文精讀錯誤切碎句子。
+  - `getProgressionState()` 跨日重置時自動計算並累加 `streakDays` 連勝天數並持久化；`renderResult()` 在發音評分 $\ge 75$ 分時自動觸發 `markDailyQuest('chat')` 與 XP 獎勵。
+- **[Low] 本機啟動腳本回環位址一致性**：
+  - `start-uk.ps1` 啟動網址由 `http://localhost:8000` 統一改為 `http://127.0.0.1:8000`，確保與 `--bind 127.0.0.1` 完全一致。
+
+---
+
 ## [1.1.0] - 2026-10-12
 
 ### 🌐 香港繁體中文在地化 (Hong Kong Traditional Chinese Localization)

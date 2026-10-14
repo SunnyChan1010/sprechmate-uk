@@ -5,7 +5,7 @@ Write-Host "==========================================" -ForegroundColor Cyan
 Write-Host ""
 
 $port = 8000
-$url = "http://localhost:$port"
+$url = "http://127.0.0.1:$port"
 
 # Check if Python is available
 if (Get-Command python -ErrorAction SilentlyContinue) {

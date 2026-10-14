@@ -3,8 +3,23 @@
  * 策略：本站 GET 请求走网络优先，失败时读缓存；API 与 CDN 请求不拦截。
  * 注意：更新 index.html 后刷新页面即生效，无需手动清缓存。
  */
-const CACHE = 'sprechmate-uk-v3';
-const ASSETS = ['./', 'index.html', 'quotes.js', 'qrgen.js', 'qr-scanner-worker.min.js', 'manifest.json', 'icon-192.png', 'icon-512.png', 'uk_prompts.json', 'uk_reading_presets.json', 'uk_stages.json', 'uk_drills.json'];
+const CACHE = 'sprechmate-uk-v4';
+const ASSETS = [
+  './',
+  'index.html',
+  'uk_engine.js',
+  'quotes.js',
+  'qrgen.js',
+  'qr-scanner-worker.min.js',
+  'manifest.json',
+  'favicon-32.png',
+  'icon-192.png',
+  'icon-512.png',
+  'uk_prompts.json',
+  'uk_reading_presets.json',
+  'uk_stages.json',
+  'uk_drills.json'
+];
 
 const PHOTOS = [
   'img/checkin/01-schwarzwald-1.webp',
@@ -71,9 +86,17 @@ self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
   e.respondWith(
     fetch(e.request).then((res) => {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(e.request, copy));
+      if (res && res.ok && res.status === 200) {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(e.request, copy));
+      }
       return res;
-    }).catch(() => caches.match(e.request).then((r) => r || caches.match('index.html')))
+    }).catch(() =>
+      caches.match(e.request).then((r) => {
+        if (r) return r;
+        if (e.request.mode === 'navigate') return caches.match('index.html');
+        return new Response('Offline', { status: 503, statusText: 'Offline' });
+      })
+    )
   );
 });

@@ -1,6 +1,6 @@
 {
   "name": "sprechmate-uk",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "SprechMate (UK Edition) - British English Survival & Reading Fluency PWA with AI Spaced Repetition and Articulatory Anatomy Diagrams",
   "main": "index.html",
   "scripts": {
