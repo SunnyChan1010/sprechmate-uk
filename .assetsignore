@@ -1,0 +1,18 @@
+# Cloudflare Pages Assets Ignore
+.git
+.gitignore
+.agentrules
+.cursorrules
+.cloudflare
+.wrangler
+node_modules
+tests
+*.md
+package.json
+package-lock.json
+cloudflare.config.ts
+wrangler.config.ts
+start-uk.ps1
+quotes.csv
+en0.png
+en1.png

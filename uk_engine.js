@@ -237,27 +237,45 @@ function renderPhoneticSvg(sym) {
   </svg>`;
 }
 
+function resolvePhoneticGuideKey(sym) {
+  if (!sym) return null;
+  const s = String(sym).toLowerCase().replace(/[\/\[\]]/g, '').trim();
+  if (s === 'θ') return 'θ';
+  if (s === 'ð') return 'ð';
+  if (s === 'v' || s === 'w') return 'v';
+  if (s === 'l' || s === 'ɫ' || s === 'l_dark') return 'l_dark';
+  if (s === 'iː' || s === 'ɪ' || s === 'i:' || s === 'i') return 'iː';
+  if (s === 'ɒ' || s === 'ɔː' || s === 'ɔ:' || s === 'o') return 'ɒ';
+  if (s === 'ʔ') return 'ʔ';
+  return null;
+}
+
 let activePhKey = 'θ';
 function showPhoneticModal(symbol, word) {
   const modal = document.getElementById('phoneticModal');
   if (!modal) return;
   
-  let key = 'θ';
-  const s = (symbol || '').toLowerCase();
-  if (s.includes('θ')) key = 'θ';
-  else if (s.includes('ð')) key = 'ð';
-  else if (s.includes('v') || s.includes('w')) key = 'v';
-  else if (s.includes('l') || s.includes('ɫ')) key = 'l_dark';
-  else if (s.includes('iː') || s.includes('ɪ')) key = 'iː';
-  else if (s.includes('ɒ') || s.includes('ɔː')) key = 'ɒ';
-  else if (s.includes('ʔ')) key = 'ʔ';
-  activePhKey = key;
+  const key = resolvePhoneticGuideKey(symbol);
+  activePhKey = key || '';
 
-  const info = PHONETIC_GUIDE[key] || PHONETIC_GUIDE['θ'];
+  const cleanSym = String(symbol || '').replace(/[\/\[\]]/g, '').trim() || (key ? PHONETIC_GUIDE[key].badge : '音素');
+  const info = key ? PHONETIC_GUIDE[key] : {
+    title: `標準發音口型與舌位 /${cleanSym}/`,
+    badge: `/${cleanSym}/`,
+    sampleWord: word || cleanSym,
+    sampleVoiceText: word || cleanSym,
+    cantonesePitfall: '💡 提示：點擊上方示範詞或下方例詞可直接聆聽標準英音發音。',
+    tips: [
+      '保持喉部放鬆，注意口腔共鳴與元音長度。',
+      '點擊例詞聆聽標準英式發音（RP/SSBE）並仔細對比。'
+    ],
+    examples: word ? [word] : []
+  };
+
   document.getElementById('phModalTitle').textContent = info.title;
   document.getElementById('phModalBadge').textContent = info.badge;
   document.getElementById('phModalWord').textContent = word || info.sampleWord;
-  document.getElementById('phDiagramSvgWrap').innerHTML = renderPhoneticSvg(key);
+  document.getElementById('phDiagramSvgWrap').innerHTML = renderPhoneticSvg(key || '');
 
   const guideBox = document.getElementById('phGuidanceText');
   if (guideBox) {
@@ -403,18 +421,19 @@ async function idbReviewPut(item) {
 async function idbReviewsSyncBatch(items, clearFirst = false) {
   try {
     const db = await idb();
-    if (!db.objectStoreNames.contains('reviews')) return;
+    if (!db.objectStoreNames.contains('reviews')) return false;
     return new Promise((resolve) => {
       try {
         const tx = db.transaction('reviews', 'readwrite');
         const store = tx.objectStore('reviews');
         if (clearFirst) store.clear();
         (items || []).forEach(item => store.put(item));
-        tx.oncomplete = () => resolve();
-        tx.onerror = () => resolve();
-      } catch (e) { resolve(); }
+        tx.oncomplete = () => resolve(true);
+        tx.onerror = () => resolve(false);
+        tx.onabort = () => resolve(false);
+      } catch (e) { resolve(false); }
     });
-  } catch (e) {}
+  } catch (e) { return false; }
 }
 
 async function idbReviewDel(id) {
@@ -432,8 +451,12 @@ async function idbReviewDel(id) {
   } catch (e) {}
 }
 
+let reviewsIdbOk = false; // IndexedDB 'reviews' 可用且已完成遷移：之後不再雙寫 localStorage
+
 async function initReviewsStore() {
   let loaded = await idbReviewGetAll();
+  const idbAvailable = Array.isArray(loaded);
+  const fromIdb = idbAvailable && loaded.length > 0;
   if (!loaded || !loaded.length) {
     try {
       const raw = localStorage.getItem(LS_REVIEWS);
@@ -444,14 +467,27 @@ async function initReviewsStore() {
     loaded = JSON.parse(JSON.stringify(DEFAULT_UK_REVIEWS));
   }
   reviewsCache = loaded || [];
-  persistReviewsCache();
+  if (fromIdb || (idbAvailable && await idbReviewsSyncBatch(reviewsCache))) {
+    reviewsIdbOk = true;
+    try { localStorage.removeItem(LS_REVIEWS); } catch (e) {} // 確認寫入成功後才清掉舊副本
+  } else {
+    try { localStorage.setItem(LS_REVIEWS, JSON.stringify(reviewsCache)); } catch (e) {}
+  }
+  updateDueBadge();
 }
 
-function persistReviewsCache(clearFirst = false) {
-  try {
-    localStorage.setItem(LS_REVIEWS, JSON.stringify(reviewsCache));
-  } catch (e) {}
-  idbReviewsSyncBatch(reviewsCache, clearFirst).catch(() => {});
+/* changedItems：只寫入這些卡片（增量）；不傳則全表同步（匯入 / 遷移用） */
+function persistReviewsCache(clearFirst = false, changedItems = null) {
+  if (reviewsIdbOk) {
+    if (Array.isArray(changedItems) && !clearFirst) {
+      changedItems.forEach(it => { if (it) idbReviewPut(it).catch(() => {}); });
+    } else {
+      idbReviewsSyncBatch(reviewsCache, clearFirst).catch(() => {});
+    }
+  } else {
+    try { localStorage.setItem(LS_REVIEWS, JSON.stringify(reviewsCache)); } catch (e) {}
+    idbReviewsSyncBatch(reviewsCache, clearFirst).catch(() => {});
+  }
   updateDueBadge();
 }
 
@@ -466,7 +502,7 @@ async function addReviewItem({ text, translation, context, type, stage, score })
     existing.dueDate = Date.now();
     if (score) existing.lastScore = score;
     if (!existing.translation && resolvedTrans) existing.translation = resolvedTrans;
-    persistReviewsCache();
+    persistReviewsCache(false, [existing]);
     renderReviewStudio();
     return existing;
   }
@@ -487,7 +523,7 @@ async function addReviewItem({ text, translation, context, type, stage, score })
     history: []
   };
   reviewsCache.unshift(newItem);
-  persistReviewsCache();
+  persistReviewsCache(false, [newItem]);
   renderReviewStudio();
   return newItem;
 }
@@ -495,7 +531,7 @@ async function addReviewItem({ text, translation, context, type, stage, score })
 function deleteReviewItem(id) {
   reviewsCache = reviewsCache.filter(r => r.id !== id);
   idbReviewDel(id).catch(() => {});
-  persistReviewsCache();
+  persistReviewsCache(false, []);
   renderReviewStudio();
 }
 
@@ -589,6 +625,35 @@ function renderReviewStudio() {
   renderPhrasebookList();
 }
 
+function detectCardPhoneticGuides(text) {
+  const str = (text || '').toLowerCase();
+  const guides = [];
+  const voicedThRegex = /\b(the|this|that|these|those|there|their|theirs|they|them|then|than|though|although|brother|mother|father|weather|leather|feather|together|breathe|with|either|neither|other|another|smooth)\b/i;
+  const hasTh = /\b\w*th\w*\b/i.test(str);
+  if (voicedThRegex.test(str) || str.includes('ð')) {
+    guides.push({ ph: 'ð', label: '👅 口型圖 /ð/' });
+  }
+  if ((hasTh && !voicedThRegex.test(str)) || str.includes('θ')) {
+    guides.push({ ph: 'θ', label: '👅 口型圖 /θ/' });
+  }
+  if (/\b\w*v\w*\b/i.test(str) || str.includes('v')) {
+    guides.push({ ph: 'v', label: '👅 口型圖 /v/' });
+  }
+  if (/[aeiou]l(?![aeiou])/i.test(str) || str.includes('ɫ') || str.includes('l_dark')) {
+    guides.push({ ph: 'l_dark', label: '👅 口型圖 [ɫ]' });
+  }
+  if (/(?:ee|ea)|\b(?:sheet|shit|beach|bitch|seat|sit|leave|live|ship|sheep)\b/i.test(str) || str.includes('iː') || str.includes('ɪ')) {
+    guides.push({ ph: 'iː', label: '👅 口型圖 /iː/' });
+  }
+  if (/\b(?:hot|cost|coffee|doctor|holiday|bottle|lot|pot|shop|clock|sock)\b/i.test(str) || str.includes('ɒ')) {
+    guides.push({ ph: 'ɒ', label: '👅 口型圖 /ɒ/' });
+  }
+  if (/wa['']er|bo['']le|bu['']er/i.test(str) || str.includes('ʔ')) {
+    guides.push({ ph: 'ʔ', label: '👅 口型圖 /ʔ/' });
+  }
+  return guides;
+}
+
 function renderActiveReviewCard(item) {
   const container = document.getElementById('reviewCardContent');
   if (!container || !item) return;
@@ -638,17 +703,15 @@ function renderActiveReviewCard(item) {
   if (transBox) {
     const btnWrap = transBox.querySelector('.phoneme-buttons-wrap');
     if (btnWrap) {
-      const trickyList = ['θ', 'ð', 'v', 'l', 'iː', 'ɒ', 'ʔ'];
-      trickyList.forEach(ph => {
-        if (item.text.toLowerCase().includes(ph) || (ph === 'θ' && item.text.toLowerCase().includes('th'))) {
-          const btn = document.createElement('button');
-          btn.className = 'btn-sm';
-          btn.style.cssText = 'border-color:#c4b5fd;color:#7c3aed;margin-right:6px;margin-top:4px';
-          btn.textContent = `👅 口型圖 /${ph}/`;
-          btn.type = 'button';
-          btn.onclick = (e) => { e.stopPropagation(); showPhoneticModal(ph, item.text); };
-          btnWrap.appendChild(btn);
-        }
+      const guides = detectCardPhoneticGuides(item.text);
+      guides.forEach(g => {
+        const btn = document.createElement('button');
+        btn.className = 'btn-sm';
+        btn.style.cssText = 'border-color:#c4b5fd;color:#7c3aed;margin-right:6px;margin-top:4px';
+        btn.textContent = g.label;
+        btn.type = 'button';
+        btn.onclick = (e) => { e.stopPropagation(); showPhoneticModal(g.ph, item.text); };
+        btnWrap.appendChild(btn);
       });
     }
   }
@@ -658,10 +721,10 @@ function renderActiveReviewCard(item) {
     editBtn.onclick = async (e) => {
       e.stopPropagation();
       if (typeof promptDlg === 'function') {
-        const nextVal = await promptDlg('編輯閃卡背面釋義／筆記', item.translation || fallbackNote || '');
+        const nextVal = await promptDlg('編輯閃卡背面釋義／筆記', '', item.translation || fallbackNote || '', '輸入中文翻譯、例句或發音提示');
         if (nextVal !== null) {
           item.translation = nextVal.trim();
-          persistReviewsCache();
+          persistReviewsCache(false, [item]);
           renderActiveReviewCard(item);
           const tr = document.getElementById('flashcardTrans');
           if (tr) tr.classList.remove('hidden');
@@ -715,13 +778,19 @@ async function startReviewVoiceAssessment(item) {
   }
 }
 
+window.clearPendingReviewAssessment = function() { pendingReviewAssessmentId = null; };
+
 window.completeReviewVoiceAssessment = function(overallScore, accScore, fluScore) {
   if (!pendingReviewAssessmentId) return false;
   const targetId = pendingReviewAssessmentId;
   pendingReviewAssessmentId = null;
 
-  const item = reviewsCache.find(r => r.id === targetId) || activeReviewItem;
+  const item = reviewsCache.find(r => r.id === targetId);
   if (!item) return false;
+  // 文本一致性防線：跟讀框已換成別的句子，則這次評分與閃卡無關
+  const stBox = document.getElementById('sentenceText');
+  const curText = stBox ? stBox.value.trim() : '';
+  if (curText !== String(item.text || '').trim()) return false;
 
   const rating = overallScore >= 85 ? 4 : overallScore >= 70 ? 3 : overallScore >= 55 ? 2 : 1;
   const ratingLabels = {
@@ -752,7 +821,11 @@ window.completeReviewVoiceAssessment = function(overallScore, accScore, fluScore
     row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap';
     const info = document.createElement('div');
     info.style.cssText = 'font-size:13px;color:#1e293b';
-    info.innerHTML = `🎙️ 自測總分：<b style="color:#7c3aed;font-size:15px">${overallScore}</b> 分（準確 ${accScore || overallScore} · 流暢 ${fluScore || overallScore}）➔ 建議評級：<b>${ratingLabels[rating]}</b>`;
+    const nOv = Number(overallScore) || 0;
+    const nAcc = Number(accScore) || nOv;
+    const nFlu = Number(fluScore) || nOv;
+    const lbl = String(ratingLabels[rating] || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    info.innerHTML = `🎙️ 自測總分：<b style="color:#7c3aed;font-size:15px">${nOv}</b> 分（準確 ${nAcc} · 流暢 ${nFlu}）➔ 建議評級：<b>${lbl}</b>`;
     const cancelBtn = document.createElement('button');
     cancelBtn.className = 'btn-sm';
     cancelBtn.type = 'button';
@@ -788,14 +861,13 @@ function applyReviewRating(item, rating, score) {
 
   const updated = calcNextReview(item, rating);
   if (score) updated.lastScore = score;
-  updated.history = updated.history || [];
-  updated.history.push({ t: Date.now(), r: rating, s: score || null });
+  updated.history = (updated.history || []).concat({ t: Date.now(), r: rating, s: score || null }).slice(-50);
 
   const idx = reviewsCache.findIndex(r => r.id === item.id);
   if (idx !== -1) {
     reviewsCache[idx] = updated;
   }
-  persistReviewsCache();
+  persistReviewsCache(false, [updated]);
 
   addProgressionXp(15, '完成語塊間隔重溫');
   markDailyQuest('review');
@@ -887,13 +959,20 @@ function renderPhrasebookList() {
   }
 }
 
+function sanitizeAnkiField(val) {
+  let s = esc(val || '').replace(/\t+/g, ' ').replace(/\r?\n/g, '<br>');
+  if (/^[=+\-@]/.test(s)) s = ' ' + s; // 防禦試算表公式注入
+  return s;
+}
+
 function exportToAnki() {
   if (!reviewsCache.length) { alertDlg('目前沒有語塊可匯出'); return; }
   let tsv = '#separator:tab\n#html:true\n#tags column:3\n';
   reviewsCache.forEach(r => {
-    const front = esc(r.text);
-    const back = esc(r.translation || '') + '<br><small>' + esc(r.context || '') + '</small>';
-    const tags = `SprechMate UK_Stage_${r.stage || 1}`;
+    const front = sanitizeAnkiField(r.text);
+    const back = sanitizeAnkiField(r.translation || '') + '<br><small>' + sanitizeAnkiField(r.context || '') + '</small>';
+    const stageNum = Math.min(4, Math.max(1, parseInt(r.stage, 10) || 1));
+    const tags = `SprechMate UK_Stage_${stageNum}`;
     tsv += `${front}\t${back}\t${tags}\n`;
   });
   const blob = new Blob([tsv], { type: 'text/tab-separated-values;charset=utf-8' });
@@ -932,12 +1011,22 @@ function importReviewsJson(file) {
     return;
   }
   const reader = new FileReader();
-  reader.onload = (e) => {
+  reader.onload = async (e) => {
     try {
       const data = JSON.parse(e.target.result, (k, v) =>
         (k === '__proto__' || k === 'constructor' || k === 'prototype') ? undefined : v
       );
-      if (Array.isArray(data.reviews)) {
+      const hasReviews = Array.isArray(data && data.reviews);
+      const hasProg = !!(data && data.progression && typeof data.progression === 'object');
+      if (!hasReviews && !hasProg) {
+        alertDlg('匯入失敗：此檔案不包含有效的語塊或進度備份資料');
+        return;
+      }
+      if (typeof confirmDlg === 'function') {
+        const ok = await confirmDlg('匯入將覆蓋目前的語塊重溫本與通關進度，確定要繼續嗎？', '確定還原');
+        if (!ok) return;
+      }
+      if (hasReviews) {
         reviewsCache = data.reviews.map(r => ({
           id: String(r.id || ('rev_' + Math.random().toString(36).substr(2, 6))),
           text: String(r.text || '').slice(0, 1000),
@@ -956,14 +1045,16 @@ function importReviewsJson(file) {
         })).filter(r => r.text.length > 0);
         persistReviewsCache(true);
       }
-      if (data.progression && typeof data.progression === 'object') {
+      if (hasProg) {
         const p = data.progression;
         const sanitizedProg = {
           xp: Math.max(0, Number(p.xp) || 0),
           level: Math.min(4, Math.max(1, Number(p.level) || 1)),
           streakDays: Math.max(1, Number(p.streakDays) || 1),
           dailyDate: String(p.dailyDate || new Date().toISOString().slice(0, 10)),
-          quests: p.quests || { review: false, reading: false, chat: false }
+          readingsCount: Math.max(0, Number(p.readingsCount) || 0),
+          quests: p.quests || { review: false, reading: false, chat: false },
+          completedMissions: Array.isArray(p.completedMissions) ? p.completedMissions : []
         };
         localStorage.setItem(LS_PROGRESSION, JSON.stringify(sanitizedProg));
       }
@@ -1163,6 +1254,158 @@ function initReadingStudio() {
       document.getElementById('readingStudioCard').classList.add('hidden');
     };
   }
+
+  const preheatBtn = document.getElementById('preheatReadingBtn');
+  if (preheatBtn) preheatBtn.onclick = preheatReadingSentences;
+  const shadowRadioBtn = document.getElementById('shadowRadioBtn');
+  if (shadowRadioBtn) shadowRadioBtn.onclick = toggleShadowRadio;
+
+  // 事件委派：整個精讀列表只掛一個監聽器處理查詞
+  const sentList = document.getElementById('readingSentencesList');
+  if (sentList) {
+    sentList.addEventListener('click', (e) => {
+      const wordEl = e.target.closest && e.target.closest('.rd-word');
+      if (!wordEl || !sentList.contains(wordEl)) return;
+      e.stopPropagation();
+      const itemEl = wordEl.closest('.reading-sentence-item');
+      const idx = itemEl ? parseInt(String(itemEl.id).replace('rd-item-', ''), 10) : NaN;
+      const sent = !isNaN(idx) ? (currentReadingSentences[idx] || '') : '';
+      showWordPopover(wordEl.textContent.trim(), e, sent);
+    });
+  }
+}
+
+let readingQuestRewarded = false;
+function rewardReadingEngagement() {
+  if (!readingQuestRewarded) {
+    readingQuestRewarded = true;
+    addProgressionXp(20, '精讀英國長文語塊');
+    markDailyQuest('reading');
+    const state = getProgressionState();
+    state.readingsCount = (state.readingsCount || 0) + 1;
+    saveProgressionState(state);
+    renderStagesDashboard();
+  }
+}
+
+let isShadowRadioActive = false;
+let shadowRadioTimer = null;
+let shadowRadioResolver = null;
+
+function stopShadowRadio() {
+  if (!isShadowRadioActive && !shadowRadioTimer && !shadowRadioResolver) return;
+  isShadowRadioActive = false;
+  if (shadowRadioTimer) {
+    clearTimeout(shadowRadioTimer);
+    shadowRadioTimer = null;
+  }
+  if (shadowRadioResolver) {
+    const res = shadowRadioResolver;
+    shadowRadioResolver = null;
+    res();
+  }
+  if (typeof stopCurrentUkAudio === 'function') stopCurrentUkAudio();
+  document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
+  const btn = document.getElementById('shadowRadioBtn');
+  if (btn) btn.textContent = '🎧 影子連播電台';
+}
+if (typeof window !== 'undefined') window.stopShadowRadio = stopShadowRadio;
+
+async function preheatReadingSentences() {
+  const btn = document.getElementById('preheatReadingBtn');
+  if (!currentReadingSentences || !currentReadingSentences.length) {
+    if (typeof alertDlg === 'function') alertDlg('請先輸入或載入要精讀的英語長文！');
+    return;
+  }
+  if (typeof ttsCached !== 'function') return;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 正在預熱...'; }
+  let successCount = 0;
+  for (let i = 0; i < currentReadingSentences.length; i++) {
+    const s = currentReadingSentences[i];
+    if (btn) btn.textContent = `⏳ 預熱中 (${i + 1}/${currentReadingSentences.length})...`;
+    try {
+      await ttsCached(s);
+      successCount++;
+    } catch (e) {}
+  }
+  if (btn) {
+    btn.textContent = `✅ 已快取 ${successCount} 句至離線庫`;
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '⚡ 一鍵離線預熱';
+    }, 3000);
+  }
+}
+
+async function preheatDrillsPack() {
+  const btn = document.getElementById('preheatDrillsBtn');
+  if (!ukDrillsData || !ukDrillsData.length) return;
+  if (typeof ttsCached !== 'function') return;
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 預熱中...'; }
+  
+  const allExamples = [];
+  ukDrillsData.forEach(d => (d.examples || []).forEach(ex => allExamples.push(ex.text)));
+  let successCount = 0;
+  for (let i = 0; i < allExamples.length; i++) {
+    const txt = allExamples[i];
+    if (btn) btn.textContent = `⏳ 預熱中 (${i + 1}/${allExamples.length})...`;
+    try {
+      await ttsCached(txt);
+      successCount++;
+    } catch (e) {}
+  }
+  if (btn) {
+    btn.textContent = `✅ 已快取 ${successCount} 條特訓原聲`;
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '⚡ 預熱特訓包 (Tube Pack)';
+    }, 3000);
+  }
+}
+
+async function toggleShadowRadio() {
+  const btn = document.getElementById('shadowRadioBtn');
+  if (isShadowRadioActive) {
+    stopShadowRadio();
+    return;
+  }
+
+  if (!currentReadingSentences || !currentReadingSentences.length) {
+    if (typeof alertDlg === 'function') alertDlg('請先輸入或載入要精讀的英語長文！');
+    return;
+  }
+
+  isShadowRadioActive = true;
+  if (btn) btn.textContent = '⏹️ 停止電台連播';
+  rewardReadingEngagement();
+
+  for (let i = 0; i < currentReadingSentences.length; i++) {
+    if (!isShadowRadioActive) break;
+    const sent = currentReadingSentences[i];
+    const item = document.getElementById('rd-item-' + i);
+    document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
+    if (item) {
+      item.classList.add('playing');
+      item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    
+    await playUkVoice(sent);
+    if (!isShadowRadioActive) break;
+
+    const wordCount = sent.split(/\s+/).filter(Boolean).length;
+    const playMs = Math.max(2000, wordCount * 380);
+    const shadowDelayMs = Math.round(playMs * 1.2);
+    
+    await new Promise(resolve => {
+      shadowRadioResolver = resolve;
+      shadowRadioTimer = setTimeout(() => {
+        shadowRadioResolver = null;
+        resolve();
+      }, playMs + shadowDelayMs);
+    });
+  }
+
+  stopShadowRadio();
 }
 
 function analyzeReadingText(rawText) {
@@ -1184,11 +1427,9 @@ function analyzeReadingText(rawText) {
   document.getElementById('readingWordCount').textContent = `共 ${wordCount} 詞`;
   document.getElementById('readingSentenceCount').textContent = `${currentReadingSentences.length} 個語塊`;
 
+  readingQuestRewarded = false;
   renderReadingStudio(currentReadingSentences);
   document.getElementById('readingStudioCard').classList.remove('hidden');
-
-  addProgressionXp(20, '開啟長文精讀');
-  markDailyQuest('reading');
 }
 
 function renderReadingStudio(sentences) {
@@ -1218,23 +1459,28 @@ function renderReadingStudio(sentences) {
       <div class="sentence-text-wrap" id="rd-text-${idx}">${wrappedHtml}</div>
       <div class="sentence-actions">
         <button class="btn-sm" id="rd-play-${idx}" type="button">🔊 朗讀</button>
-        <button class="btn-sm" id="rd-shadow-${idx}" type="button">🎙️ 跟讀特訓</button>
+        <button class="btn-sm" id="rd-shadow-${idx}" type="button" title="${(typeof t === 'function' ? t('sent.loadPractice') : '載入句子練習')}">🎙️ 跟讀特訓</button>
         <button class="btn-sm" id="rd-add-${idx}" type="button">⭐ 加至重溫</button>
       </div>
     `;
 
     item.querySelector('#rd-play-' + idx).onclick = () => {
+      rewardReadingEngagement();
       document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
       item.classList.add('playing');
       playUkVoice(sent);
     };
 
     item.querySelector('#rd-shadow-' + idx).onclick = () => {
-      const stBox = document.getElementById('sentenceText');
-      if (stBox) stBox.value = sent;
+      rewardReadingEngagement();
       switchTab('practice');
-      if (typeof genRefAudio === 'function') {
-        genRefAudio(sent, true).catch(() => {});
+      if (typeof selectSentence === 'function') {
+        selectSentence(sent, true);
+      } else {
+        const stBox = document.getElementById('sentenceText');
+        if (stBox) stBox.value = sent;
+        if (typeof autoGrowTextarea === 'function' && stBox) autoGrowTextarea(stBox);
+        if (typeof genRefAudio === 'function') genRefAudio(sent, true).catch(() => {});
       }
     };
 
@@ -1249,15 +1495,6 @@ function renderReadingStudio(sentences) {
       e.target.textContent = '✅ 已收錄';
       e.target.disabled = true;
     };
-
-    item.querySelectorAll('.rd-word').forEach(wordEl => {
-      const openPop = (e) => {
-        e.stopPropagation();
-        showWordPopover(wordEl.textContent.trim(), e, sent);
-      };
-      wordEl.onclick = openPop;
-      wordEl.ondblclick = openPop;
-    });
 
     container.appendChild(item);
   });
@@ -1314,15 +1551,21 @@ function showWordPopover(word, event, contextSentence) {
 let ukStagesData = [];
 let ukDrillsData = [];
 
+function localDayStr() {
+  if (typeof usageDay === 'function') return usageDay();
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
 function getProgressionState() {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDayStr();
   try {
     const raw = localStorage.getItem(LS_PROGRESSION);
     if (raw) {
       const state = JSON.parse(raw);
       if (state.dailyDate !== today) {
-        const prevMs = Date.parse(state.dailyDate);
-        const currMs = Date.parse(today);
+        const prevMs = Date.parse(state.dailyDate + 'T00:00:00Z');
+        const currMs = Date.parse(today + 'T00:00:00Z');
         const diffDays = !isNaN(prevMs) ? Math.round((currMs - prevMs) / 86400000) : 0;
         state.streakDays = diffDays === 1 ? (Number(state.streakDays) || 1) + 1 : 1;
         state.dailyDate = today;
@@ -1376,6 +1619,69 @@ async function loadStagesAndDrills() {
     if (resD.ok) ukDrillsData = await resD.json();
   } catch (e) {}
 }
+
+const UK_STAGE_MISSION_OPENERS = {
+  m1: "Excuse me, could you give me a hand with the self-checkout? It's asking for approval.",
+  m2: "Can I have a flat white with oat milk and a warm sausage roll, please?",
+  m3: "Hi there, I've got a collection slip for a parcel, and I'd also like to return this prepaid package.",
+  m4: "Excuse me, which platform is for the next train to Victoria? My Oyster card doesn't seem to tap in.",
+  m5: "Good morning, I'm calling to book a triage appointment with a GP today. My name is Alex and my postcode is SW1A 1AA.",
+  m6: "Hello, I'd like to report a missed wheelie bin collection on our street and check my Council Tax direct debit.",
+  m7: "Hi, I'd like to open a current account and I've brought my passport and tenancy agreement as proof of address.",
+  m8: "Hello, I'm calling to submit our latest electricity meter reading and report an intermittent broadband outage.",
+  m9: "Good morning, our combi-boiler has completely shut down and we've had no heating or hot water for over 24 hours.",
+  m10: "I'm writing regarding the proposed deductions from our tenancy deposit; the checkout inventory clearly shows this is fair wear and tear.",
+  m11: "I see your point, but I'm not entirely convinced that this timeline is realistic given our current resource constraints.",
+  m12: "Under the statutory tenancy regulations, the landlord is legally obligated to keep in repair the structure and exterior of the dwelling.",
+  m13: "Hi mate, could I get a pint of London Pride and a packet of salt and vinegar crisps, please? Next round is on me.",
+  m14: "Miserable out there, isn't it? Typical British summer! Any exciting plans for the weekend if it clears up?",
+  m15: "The recent economic forecast raises fundamental questions about long-term fiscal policy and public sector investment in the UK."
+};
+
+let activeStageMissionId = null;
+if (typeof window !== 'undefined') window.activeStageMissionId = null;
+
+function launchStageMission(missionId) {
+  activeStageMissionId = missionId;
+  if (typeof window !== 'undefined') window.activeStageMissionId = missionId;
+  const opener = UK_STAGE_MISSION_OPENERS[missionId];
+  if (!opener) return;
+  switchTab('practice');
+  if (typeof selectSentence === 'function') {
+    selectSentence(opener, true);
+  } else {
+    const stBox = document.getElementById('sentenceText');
+    if (stBox) stBox.value = opener;
+    if (typeof autoGrowTextarea === 'function' && stBox) autoGrowTextarea(stBox);
+    if (typeof genRefAudio === 'function') genRefAudio(opener, true).catch(() => {});
+  }
+}
+
+function completeStageMission(missionId) {
+  if (!missionId) return;
+  const state = getProgressionState();
+  state.completedMissions = state.completedMissions || [];
+  if (!state.completedMissions.includes(missionId)) {
+    state.completedMissions.push(missionId);
+    let missionXp = 30;
+    if (Array.isArray(ukStagesData)) {
+      for (const stg of ukStagesData) {
+        const found = (stg.missions || []).find(m => m.id === missionId);
+        if (found) { missionXp = found.xp || 30; break; }
+      }
+    }
+    state.xp = (state.xp || 0) + missionXp;
+    state.level = state.xp >= 2500 ? 4 : state.xp >= 1000 ? 3 : state.xp >= 300 ? 2 : 1;
+    saveProgressionState(state);
+    renderStagesDashboard();
+    if (typeof alertDlg === 'function') {
+      alertDlg(`🎉 恭喜通關英國實戰任務！獲得 +${missionXp} XP！`);
+    }
+  }
+  activeStageMissionId = null;
+  if (typeof window !== 'undefined') window.activeStageMissionId = null;
+}
+if (typeof window !== 'undefined') window.completeStageMission = completeStageMission;
 
 function renderStagesDashboard() {
   const state = getProgressionState();
@@ -1442,6 +1748,111 @@ function renderStagesDashboard() {
     if (chBtn) chBtn.onclick = () => switchTab('practice');
   }
 
+  // Stage Targets Checklist
+  const targetsWrap = document.getElementById('stageTargetsList');
+  if (targetsWrap && stageObj && stageObj.targets) {
+    let totalPracticeCount = 0, totalScore = 0, scoreCount = 0;
+    let totalFluency = 0, fluCount = 0;
+    let totalProsody = 0, proCount = 0;
+    if (typeof getConvs === 'function') {
+      try {
+        getConvs().forEach(c => (c.records || []).forEach(r => {
+          totalPracticeCount++;
+          if (typeof r.score === 'number' && r.score > 0) {
+            totalScore += r.score;
+            scoreCount++;
+          }
+          if (typeof r.fluency === 'number' && r.fluency > 0) {
+            totalFluency += r.fluency;
+            fluCount++;
+          }
+          if (typeof r.prosody === 'number' && r.prosody > 0) {
+            totalProsody += r.prosody;
+            proCount++;
+          }
+        }));
+      } catch (e) {}
+    }
+    const avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : 0;
+    const avgFluency = fluCount > 0 ? Math.round(totalFluency / fluCount) : avgScore;
+    const avgProsody = proCount > 0 ? Math.round(totalProsody / proCount) : avgScore;
+    const reviewsCount = reviewsCache.length;
+    const masteredCount = reviewsCache.filter(r => (r.interval || 0) >= 21 || (r.reps || 0) >= 3).length;
+
+    const targets = stageObj.targets;
+    const items = [];
+    if (targets.conversations != null) {
+      items.push({ label: '情境對話／跟讀次數', curr: totalPracticeCount, target: targets.conversations });
+    }
+    if (targets.avgScore != null) {
+      items.push({ label: '平均發音準確分', curr: avgScore, target: targets.avgScore, unit: '分' });
+    }
+    if (targets.fluency != null) {
+      items.push({ label: '流利度指標', curr: avgFluency, target: targets.fluency, unit: '分' });
+    }
+    if (targets.prosody != null) {
+      items.push({ label: '節奏韻律指標', curr: avgProsody, target: targets.prosody, unit: '分' });
+    }
+    if (targets.readings != null) {
+      items.push({ label: '長文精讀篇數', curr: state.readingsCount || 0, target: targets.readings, unit: '篇' });
+    }
+    if (targets.reviews != null) {
+      items.push({ label: '收錄在地語塊', curr: reviewsCount, target: targets.reviews, unit: '條' });
+    }
+    if (targets.masteredPhrases != null) {
+      items.push({ label: '熟練掌握語塊', curr: masteredCount, target: targets.masteredPhrases, unit: '條' });
+    }
+
+    targetsWrap.innerHTML = items.map(it => {
+      const ok = it.curr >= it.target;
+      const unit = it.unit || '';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px">
+        <span>${ok ? '✅' : '🎯'} ${esc(it.label)}</span>
+        <span style="font-weight:600;color:${ok ? '#10b981' : '#64748b'}">${it.curr}${unit} / ${it.target}${unit}</span>
+      </div>`;
+    }).join('');
+  }
+
+  // 15 Stage Missions
+  const missionsWrap = document.getElementById('stageMissionsList');
+  if (missionsWrap && Array.isArray(ukStagesData) && ukStagesData.length) {
+    const completed = state.completedMissions || [];
+    const countEl = document.getElementById('stageMissionsProgress');
+    if (countEl) countEl.textContent = `${completed.length} / 15 完成`;
+
+    missionsWrap.innerHTML = '';
+    ukStagesData.forEach(stg => {
+      const stgBlock = document.createElement('div');
+      stgBlock.style.cssText = 'margin-bottom:12px';
+      const stgHeader = document.createElement('div');
+      stgHeader.style.cssText = 'font-size:12px;font-weight:bold;color:#475569;margin-bottom:6px;display:flex;align-items:center;gap:6px';
+      stgHeader.innerHTML = `${stg.badge} <b>Stage ${stg.level}: ${esc(stg.name)}</b>`;
+      stgBlock.appendChild(stgHeader);
+
+      (stg.missions || []).forEach(m => {
+        const isDone = completed.includes(m.id);
+        const mRow = document.createElement('div');
+        mRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 10px;margin-bottom:6px;background:' + (isDone ? '#f0fdf4' : '#f8fafc') + ';border:1px solid ' + (isDone ? '#bbf7d0' : '#e2e8f0') + ';border-radius:6px;font-size:13px';
+        mRow.innerHTML = `
+          <div style="flex:1;min-width:0;margin-right:8px">
+            <div style="font-weight:500;color:#1e293b;display:flex;align-items:center;gap:6px">
+              <span>${isDone ? '✅' : '⭕'}</span>
+              <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.title)}</span>
+            </div>
+            <div style="font-size:11px;color:#64748b;margin-left:22px">
+              <span class="badge" style="background:#e0e7ff;color:#3730a3;font-size:10px;padding:1px 5px">${esc(m.category)}</span>
+              <span style="margin-left:4px">+${m.xp} XP</span>
+            </div>
+          </div>
+          <button class="btn-sm" type="button" style="flex:none">${isDone ? '再次演練' : '🎯 挑戰'}</button>
+        `;
+        mRow.querySelector('button').onclick = () => launchStageMission(m.id);
+        stgBlock.appendChild(mRow);
+      });
+      missionsWrap.appendChild(stgBlock);
+    });
+  }
+
   renderDrillsAccordion();
 }
 
@@ -1488,6 +1899,9 @@ function renderDrillsAccordion() {
       shadowBtn.className = 'btn-sm';
       shadowBtn.textContent = '🎙️';
       shadowBtn.type = 'button';
+      const loadTxt = (typeof t === 'function' ? t('sent.loadPractice') : ((typeof getSettings === 'function' && getSettings().uiLang === 'en') ? 'Load into Practice' : '載入句子練習'));
+      shadowBtn.title = loadTxt;
+      shadowBtn.setAttribute('aria-label', loadTxt);
       shadowBtn.onclick = () => drillShadowSentence(ex.text);
 
       btns.appendChild(playBtn);
@@ -1503,11 +1917,14 @@ function renderDrillsAccordion() {
 }
 
 function drillShadowSentence(text) {
-  const stBox = document.getElementById('sentenceText');
-  if (stBox) stBox.value = text;
   switchTab('practice');
-  if (typeof genRefAudio === 'function') {
-    genRefAudio(text, true).catch(() => {});
+  if (typeof selectSentence === 'function') {
+    selectSentence(text, true);
+  } else {
+    const stBox = document.getElementById('sentenceText');
+    if (stBox) stBox.value = text;
+    if (typeof autoGrowTextarea === 'function' && stBox) autoGrowTextarea(stBox);
+    if (typeof genRefAudio === 'function') genRefAudio(text, true).catch(() => {});
   }
 }
 
@@ -1523,6 +1940,7 @@ function switchTab(tabId) {
     clearTimeout(reviewAutoTimer);
     reviewAutoTimer = null;
   }
+  if (tabId !== 'practice') pendingReviewAssessmentId = null;
 
   document.querySelectorAll('#appTabs .tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tabId);
@@ -1599,21 +2017,26 @@ function initUkSuite() {
   const hearPhBtn = document.getElementById('phModalHearBtn');
   if (hearPhBtn) {
     hearPhBtn.onclick = () => {
-      const info = PHONETIC_GUIDE[activePhKey] || PHONETIC_GUIDE['θ'];
-      playUkVoice(info.sampleVoiceText);
+      const info = (activePhKey && PHONETIC_GUIDE[activePhKey]) ? PHONETIC_GUIDE[activePhKey] : null;
+      const textToPlay = info ? (info.sampleVoiceText || info.sampleWord) : (document.getElementById('phModalWord').textContent || 'water');
+      playUkVoice(textToPlay);
     };
   }
 
   const pracPhBtn = document.getElementById('phModalPracticeBtn');
   if (pracPhBtn) {
     pracPhBtn.onclick = () => {
-      const info = PHONETIC_GUIDE[activePhKey] || PHONETIC_GUIDE['θ'];
-      const stBox = document.getElementById('sentenceText');
-      if (stBox) stBox.value = info.sampleWord.split(',')[0].trim();
+      const info = (activePhKey && PHONETIC_GUIDE[activePhKey]) ? PHONETIC_GUIDE[activePhKey] : null;
+      const practiceText = info ? (info.sampleVoiceText || info.sampleWord) : (document.getElementById('phModalWord').textContent || '');
       closePhoneticModal();
       switchTab('practice');
-      if (typeof genRefAudio === 'function') {
-        genRefAudio(stBox.value, true).catch(() => {});
+      if (typeof selectSentence === 'function') {
+        selectSentence(practiceText, true);
+      } else {
+        const stBox = document.getElementById('sentenceText');
+        if (stBox) stBox.value = practiceText;
+        if (typeof autoGrowTextarea === 'function' && stBox) autoGrowTextarea(stBox);
+        if (typeof genRefAudio === 'function') genRefAudio(practiceText, true).catch(() => {});
       }
     };
   }
@@ -1630,8 +2053,12 @@ function initUkSuite() {
       if (e.target.files && e.target.files[0]) {
         importReviewsJson(e.target.files[0]);
       }
+      e.target.value = '';
     };
   }
+
+  const preheatDrillsBtn = document.getElementById('preheatDrillsBtn');
+  if (preheatDrillsBtn) preheatDrillsBtn.onclick = preheatDrillsPack;
 
   // Dismiss popover when clicking outside
   document.addEventListener('click', (e) => {
@@ -1663,10 +2090,9 @@ function initUkSuite() {
 // Memory-leak-proof Audio player with strict URL release and concurrent lock
 let currentUkAudio = null;
 let currentUkAudioUrl = null;
+let ukVoiceSeq = 0; // 單調遞增請求序號：丟棄先發後至的舊請求
 
-async function playUkVoice(text) {
-  if (!text) return;
-
+function stopCurrentUkAudio() {
   if (currentUkAudio) {
     try {
       currentUkAudio.pause();
@@ -1678,11 +2104,27 @@ async function playUkVoice(text) {
     try { URL.revokeObjectURL(currentUkAudioUrl); } catch (e) {}
     currentUkAudioUrl = null;
   }
+  if ('speechSynthesis' in window) {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+}
+
+async function playUkVoice(text, forceOffline) {
+  if (!text) return;
+  if (typeof window.isAudioRecordingActive === 'function' && window.isAudioRecordingActive()) return;
+  const mySeq = ++ukVoiceSeq;
+
+  stopCurrentUkAudio();
 
   const s = (typeof getSettings === 'function') ? getSettings() : {};
-  if (s.azureKey && s.azureRegion && typeof ttsCached === 'function') {
+  const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  const cloudReady = !forceOffline && !isOffline && ((typeof canUseCloudTts === 'function') ? canUseCloudTts(s) : !!(s.azureKey && s.azureRegion));
+  if (cloudReady && typeof ttsCached === 'function') {
     try {
-      const res = await ttsCached(text, s.voice || 'en-GB-SoniaNeural');
+      const res = await ttsCached(text);
+      if (mySeq !== ukVoiceSeq) return; // 等待期間已有更新的播放請求
+      if (typeof window.isAudioRecordingActive === 'function' && window.isAudioRecordingActive()) return;
+      stopCurrentUkAudio();
       const url = URL.createObjectURL(res.blob);
       currentUkAudioUrl = url;
       const a = new Audio(url);
@@ -1703,6 +2145,7 @@ async function playUkVoice(text) {
       await a.play();
       return;
     } catch (e) {
+      if (mySeq !== ukVoiceSeq) return;
       if (currentUkAudioUrl) {
         try { URL.revokeObjectURL(currentUkAudioUrl); } catch (err) {}
         currentUkAudioUrl = null;
@@ -1711,6 +2154,7 @@ async function playUkVoice(text) {
     }
   }
 
+  if (typeof window.isAudioRecordingActive === 'function' && window.isAudioRecordingActive()) return;
   if ('speechSynthesis' in window) {
     window.speechSynthesis.cancel();
     const utt = new SpeechSynthesisUtterance(text);

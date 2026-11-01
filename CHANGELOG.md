@@ -2,6 +2,44 @@
 
 本專案遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-TW/) 語意化版本規範，並採用 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/) 格式記錄變更。
 
+## [1.5.0] - 2026-11-01
+
+### 🛡️ Phase 1 ~ Phase 4：系統盲點獵殺、防禦加固與高槓桿戰略演進 (Stability Hardening & Strategic Evolution)
+- **Phase 1 止血與防禦加固 (Zero Architecture Change)**：
+  - **修復全域多語系 `t(key)` 變數遮蔽**：修正 `index.html` 與 `uk_engine.js` 內多處以 `t` 命名參數之閉包（如 `clipboard.readText().then(clipText => ...)`），根絕空剪貼簿觸發 `TypeError: t is not a function` 並誤報權限拒絕之問題。
+  - **錄音前全域音訊互斥阻斷 (`stopAllAudioPlayback`)**：錄音前強制停止 `refPlayer`、`myPlayer`、`currentUkAudio`、`shadowRadio` 與 `speechSynthesis`，並自增序號作廢飛行中的 TTS 請求，徹底消除外放聲音串音至麥克風造成評分失真之缺陷。
+  - **發音解剖圖精確路由與通用兜底**：重構 `showPhoneticModal` 與 `resolvePhoneticGuideKey`，非特定 7 大音素時動態渲染通用口型 SVG 並顯示正確音標，徹底杜絕「萬物皆 `/θ/`」誤導；練習跳轉按鈕改用乾淨發音標記 (`sampleVoiceText`)。
+  - **安全發布隔離 (`.assetsignore`)**：根目錄新增 `.assetsignore`，完全排除 `.git`、`*.md`、`tests`、`package.json`、`wrangler.config.ts` 等內部審查與敏感工具腳本打包至 Cloudflare Pages 公開資產。
+- **Phase 2 痛點根治與架構減負 (Subtractive Design)**：
+  - **離線與弱網秒級自癒**：TTS 模組加入 `navigator.onLine` 前置短路判定，無網狀態下零等待直接切換為本機離線英式語音（`en-GB`）；`sw.js` 導航請求加入 3 秒競速超時，擺脫地鐵弱網 26 秒假死。
+  - **徹底清理跨語系快取與遺留檔案**：移除 `ttsFindByTextOtherLocale` 跨語系快取回退邏輯，杜絕 `en-GB` 播放非英式口音；刪除根目錄殘留之 65KB 德語 `quotes.csv`。
+  - **修正英文介面系統提示詞衝突**：`buildDefaultPrompt` 及各場景提示詞於 `uiLang === 'en'` 時，明確允許在指導說明中使用英文，解決 AI 語言分裂。
+  - **強化錯題本與進度匯入安全**：`importReviewsJson` 補齊大小限制、原型鏈污染防禦、`confirmDlg` 二次確認、結構驗證與 `input.value = ''` 重置。
+- **Phase 3 自癒與免維護設計 (Automation & Tests)**：
+  - **自動化回歸測試網 (28 Suites Passed)**：擴充 `tests/unit.test.js`，全面覆蓋變數遮蔽靜態掃描、發音導引解析、IPA 啟發式分流、`.assetsignore` 白名單、Service Worker 本地快取檔案存在性校驗、Stage 任務結構完整性與防作弊防刷分邏輯。
+- **Phase 4 高槓桿戰略演進 (High-Leverage Evolution)**：
+  - **打通 15 大英國實戰任務通關閉環**：接通 `uk_stages.json` 15 大場景生存任務與開場白，在跟讀評分達標（≥75 分）時自動觸發通關校驗、累加階梯 XP，並在階梯儀表板展示真實流利度與長文精讀完成數。
+  - **地鐵特訓離線預快取 (Tube Pack)**：新增「⚡ 預熱特訓包」功能，一鍵批次預快取 `uk_drills.json` 12 大連讀弱讀示範原聲至 IndexedDB，在地鐵隧道中無網依然流暢播放。
+  - **雙波形語調對齊視覺化 (Prosody Mirror)**：實作 `drawProsodyMirror`，在評分完成後繪製原聲與用戶發音之雙向 RMS 能量包絡線，並根據單詞時間戳動態標註對齊虛線與單詞標籤。
+
+## [1.4.0] - 2026-10-14
+
+### 🎙️ Gemini 3.8 多引擎雲端語音合成與模型全面升級 (Multi-Engine Cloud TTS & Gemini 3.8 Upgrade)
+- **整合 `gemini-3.8-flash-lite-tts` 與 `gemini-3.8-flash-tts` 原生語音合成引擎**：
+  - 支援直接呼叫 Google Gemini 3.8 官方 `/v1beta/interactions`（並向下兼容 `:generateContent`）端點合成 24kHz 16-bit WAV 原聲，內建 `speech_metadata` 英式英語（Modern RP / `en-GB`）口音與語氣引導指令，以及裸 PCM (`audio/l16`) 自動補齊 44-byte RIFF WAV 標頭防呆機制。
+  - 新增 10 款 Studio Prebuilt 語音角色選單（`Kore`、`Puck`、`Charon`、`Zephyr`、`Aoede`、`Fenrir`、`Leda`、`Sulafat`、`Schedar`、`Orus`）。
+- **四段式多引擎智慧路由與跨雲端自動備援 (`resolveTtsEngine` & `ttsBlob`)**：
+  - 設定頁新增「原聲 TTS 朗讀引擎」選擇器（`智能自動` / `Gemini 3.8 Flash-Lite TTS` / `Gemini 3.8 Flash TTS` / `Azure Speech Neural TTS`）。
+  - **開箱即用零額外配置**：自動共用上方對話介面之 Gemini API Key（或選填獨立 Gemini TTS Key），無須額外申請 Azure 帳號即可享受高品質英式 AI 朗讀。
+  - **三層無縫降級保護**：當主雲端引擎（如 Gemini TTS）發生網路波動或配額限制時，若已配置副雲端引擎（Azure Speech）則自動跨雲端切換；若雙雲端皆不可用（如倫敦地鐵無網環境），則於超時後自動降級至瀏覽器離線系統英式語音（`speechSynthesis` `en-GB`）。
+- **升級預設對話模型至 `gemini-3.8-flash`**：
+  - `DEFAULTS.chatModel` 由舊版淘汰之 `gemini-2.5-flash` 全面升級為最新一代 **`gemini-3.8-flash`**，並在 `getSettings()` 中為存量用戶提供平滑自動遷移。
+- **完善 WAV / MP3 智慧副檔名下載與快取隔離**：
+  - `ttsCached()` 針對不同引擎與語音角色建立獨立快取命名空間（如 `en-GB-gem-lite-Kore`、`en-GB-gem-flash-Kore`、`en-GB-SoniaNeural`），並讓 `uk_engine.js` 的 `playUkVoice()` 全面接入多引擎快取。
+  - `downloadRefAudio()` 根據音訊 `Blob.type` 自動判斷匯出 `.wav` 或 `.mp3` 副檔名。
+
+---
+
 ## [1.3.0] - 2026-10-14
 
 ### 🎯 Phase 1 & Phase 2：用戶核心痛點根治與高穩定減法重構 (Pain-Point Resolution & Architecture Simplification)

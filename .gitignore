@@ -15,6 +15,7 @@ backup_data/
 docs/audit/
 *.audit.md
 *AUDIT*.md
+!AUDIT_AND_ROADMAP.md
 PROJECT_METRICS_AUDIT.md
 
 # Project documentation & AI Agent context (local only, do not sync to GitHub)
