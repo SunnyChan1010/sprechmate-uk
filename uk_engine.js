@@ -318,8 +318,45 @@ function closePhoneticModal() {
   if (modal) modal.classList.add('hidden');
 }
 
-function analyzeUserPhonemeWeaknesses(convs, maxRecords) {
+const _weaknessMemo = new Map();
+let _weaknessMemoRev = -1;
+let _convStatsMemo = null;
+
+function analyzeUserPhonemeWeaknesses(convs, maxRecords = 30) {
   if (!Array.isArray(convs)) return [];
+  const limit = (typeof maxRecords === 'number' && maxRecords > 0) ? maxRecords : 30;
+
+  const revFn = (typeof window !== 'undefined' && window && typeof window.getPracticeRecordsRev === 'function')
+    ? window.getPracticeRecordsRev
+    : ((typeof getPracticeRecordsRev === 'function') ? getPracticeRecordsRev : null);
+  const rev = revFn ? revFn() : -1;
+  const liveConvsFn = (typeof window !== 'undefined' && window && typeof window.getConvs === 'function')
+    ? window.getConvs
+    : ((typeof getConvs === 'function') ? getConvs : null);
+  const isLiveConvs = !!(liveConvsFn && convs === liveConvsFn());
+  const canMemo = isLiveConvs && typeof rev === 'number' && rev >= 0;
+
+  let memoMap = null;
+  if (canMemo) {
+    if (typeof _weaknessMemo !== 'undefined') {
+      if (_weaknessMemoRev !== rev) {
+        _weaknessMemo.clear();
+        _weaknessMemoRev = rev;
+      }
+      memoMap = _weaknessMemo;
+    } else {
+      if (!analyzeUserPhonemeWeaknesses._memo || analyzeUserPhonemeWeaknesses._rev !== rev) {
+        analyzeUserPhonemeWeaknesses._memo = new Map();
+        analyzeUserPhonemeWeaknesses._rev = rev;
+      }
+      memoMap = analyzeUserPhonemeWeaknesses._memo;
+    }
+    const cacheKey = `${rev}:${limit}`;
+    if (memoMap.has(cacheKey)) {
+      return memoMap.get(cacheKey);
+    }
+  }
+
   const resolveKey = (typeof resolvePhoneticGuideKey === 'function')
     ? resolvePhoneticGuideKey
     : (sym => {
@@ -335,61 +372,82 @@ function analyzeUserPhonemeWeaknesses(convs, maxRecords) {
         return null;
       });
 
-  const allRecords = [];
-  convs.forEach(conv => {
-    if (conv && Array.isArray(conv.records)) {
-      conv.records.forEach(rec => {
-        if (rec && Array.isArray(rec.words)) allRecords.push(rec);
-      });
+  // 單趟穩定選取最近 limit 筆練習紀錄（等同全量穩定降序排序後 slice(0, limit)，免除數千筆全排序開銷）
+  const topEntries = [];
+  let minTopTs = -Infinity;
+  for (let ci = 0; ci < convs.length; ci++) {
+    const conv = convs[ci];
+    const recs = conv && Array.isArray(conv.records) ? conv.records : null;
+    if (!recs) continue;
+    for (let ri = 0; ri < recs.length; ri++) {
+      const rec = recs[ri];
+      if (!rec || !Array.isArray(rec.words)) continue;
+      const recTs = Number(rec.t) || 0;
+      if (topEntries.length === limit && recTs <= minTopTs) continue;
+      let pos = topEntries.length;
+      while (pos > 0 && topEntries[pos - 1].ts < recTs) {
+        pos--;
+      }
+      topEntries.splice(pos, 0, { rec, ts: recTs });
+      if (topEntries.length > limit) topEntries.pop();
+      if (topEntries.length === limit) {
+        minTopTs = topEntries[limit - 1].ts;
+      }
     }
-  });
-  allRecords.sort((a, b) => (Number(b.t) || 0) - (Number(a.t) || 0));
-  const limit = (typeof maxRecords === 'number' && maxRecords > 0) ? maxRecords : 30;
-  const recent = allRecords.slice(0, limit);
+  }
 
   const statsMap = Object.create(null);
-  recent.forEach(rec => {
-    (rec.words || []).forEach(wordObj => {
-      if (!wordObj || !Array.isArray(wordObj.phonemes)) return;
+  for (let idx = 0; idx < topEntries.length; idx++) {
+    const rec = topEntries[idx].rec;
+    const words = rec.words || [];
+    for (let wi = 0; wi < words.length; wi++) {
+      const wordObj = words[wi];
+      if (!wordObj || !Array.isArray(wordObj.phonemes)) continue;
       const wordStr = String(wordObj.w || '').trim();
-      wordObj.phonemes.forEach(phObj => {
-        if (!phObj) return;
+      const wordLower = wordStr ? wordStr.toLowerCase() : '';
+      const phonemes = wordObj.phonemes;
+      for (let pi = 0; pi < phonemes.length; pi++) {
+        const phObj = phonemes[pi];
+        if (!phObj) continue;
         const ph = String(phObj.p || '').trim();
         const sc = phObj.s;
-        if (!ph || typeof sc !== 'number' || !(sc > 0 && sc < 75)) return;
-        if (!statsMap[ph]) {
-          statsMap[ph] = {
+        if (!ph || typeof sc !== 'number' || !(sc > 0 && sc < 75)) continue;
+        let entry = statsMap[ph];
+        if (!entry) {
+          entry = {
             count: 0,
             scoreSum: 0,
             confusions: Object.create(null),
             sampleWords: []
           };
+          statsMap[ph] = entry;
         }
-        const entry = statsMap[ph];
         entry.count += 1;
         entry.scoreSum += sc;
         const heard = phObj.h ? String(phObj.h).trim() : '';
         if (heard && heard !== ph) {
           entry.confusions[heard] = (entry.confusions[heard] || 0) + 1;
         }
-        if (wordStr && entry.sampleWords.length < 3 && !entry.sampleWords.some(sw => sw.toLowerCase() === wordStr.toLowerCase())) {
+        if (wordStr && entry.sampleWords.length < 3 && !entry.sampleWords.some(sw => sw.toLowerCase() === wordLower)) {
           entry.sampleWords.push(wordStr);
         }
-      });
-    });
-  });
+      }
+    }
+  }
 
   const results = Object.keys(statsMap).map(phoneme => {
     const entry = statsMap[phoneme];
     let topConfusedWith = null;
     let topConfusedCount = 0;
-    Object.keys(entry.confusions).forEach(hKey => {
+    const confKeys = Object.keys(entry.confusions);
+    for (let ki = 0; ki < confKeys.length; ki++) {
+      const hKey = confKeys[ki];
       const cnt = entry.confusions[hKey];
       if (cnt > topConfusedCount) {
         topConfusedCount = cnt;
         topConfusedWith = hKey;
       }
-    });
+    }
     return {
       phoneme,
       guideKey: resolveKey(phoneme),
@@ -407,9 +465,76 @@ function analyzeUserPhonemeWeaknesses(convs, maxRecords) {
     return a.phoneme.localeCompare(b.phoneme);
   });
 
+  if (canMemo && memoMap) {
+    memoMap.set(`${rev}:${limit}`, results);
+  }
+
   return results;
 }
 if (typeof window !== 'undefined') window.analyzeUserPhonemeWeaknesses = analyzeUserPhonemeWeaknesses;
+
+function computeConvPracticeStats(convs) {
+  if (!Array.isArray(convs)) {
+    return { totalPracticeCount: 0, avgScore: 0, avgFluency: 0, avgProsody: 0 };
+  }
+  const revFn = (typeof window !== 'undefined' && window && typeof window.getPracticeRecordsRev === 'function')
+    ? window.getPracticeRecordsRev
+    : ((typeof getPracticeRecordsRev === 'function') ? getPracticeRecordsRev : null);
+  const rev = revFn ? revFn() : -1;
+  const liveConvsFn = (typeof window !== 'undefined' && window && typeof window.getConvs === 'function')
+    ? window.getConvs
+    : ((typeof getConvs === 'function') ? getConvs : null);
+  const isLiveConvs = !!(liveConvsFn && convs === liveConvsFn());
+  const hasModStats = typeof _convStatsMemo !== 'undefined';
+  const prevMemo = hasModStats ? _convStatsMemo : computeConvPracticeStats._memo;
+  if (isLiveConvs && typeof rev === 'number' && rev >= 0 && prevMemo && prevMemo.rev === rev) {
+    return prevMemo.stats;
+  }
+
+  let totalPracticeCount = 0;
+  let totalScore = 0;
+  let scoreCount = 0;
+  let totalFluency = 0;
+  let fluCount = 0;
+  let totalProsody = 0;
+  let proCount = 0;
+
+  for (let ci = 0; ci < convs.length; ci++) {
+    const conv = convs[ci];
+    const recs = conv && Array.isArray(conv.records) ? conv.records : null;
+    if (!recs) continue;
+    for (let ri = 0; ri < recs.length; ri++) {
+      const rec = recs[ri];
+      totalPracticeCount++;
+      if (!rec) continue;
+      if (typeof rec.score === 'number' && rec.score > 0) {
+        totalScore += rec.score;
+        scoreCount++;
+      }
+      if (typeof rec.fluency === 'number' && rec.fluency > 0) {
+        totalFluency += rec.fluency;
+        fluCount++;
+      }
+      if (typeof rec.prosody === 'number' && rec.prosody > 0) {
+        totalProsody += rec.prosody;
+        proCount++;
+      }
+    }
+  }
+
+  const avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : 0;
+  const avgFluency = fluCount > 0 ? Math.round(totalFluency / fluCount) : avgScore;
+  const avgProsody = proCount > 0 ? Math.round(totalProsody / proCount) : avgScore;
+  const stats = { totalPracticeCount, avgScore, avgFluency, avgProsody };
+
+  if (isLiveConvs && typeof rev === 'number' && rev >= 0) {
+    const entry = { rev, stats };
+    if (hasModStats) _convStatsMemo = entry;
+    else computeConvPracticeStats._memo = entry;
+  }
+  return stats;
+}
+if (typeof window !== 'undefined') window.computeConvPracticeStats = computeConvPracticeStats;
 
 function getPhoneticCoachingPromptHint() {
   const convs = (typeof getConvs === 'function') ? (getConvs() || []) : [];
@@ -425,10 +550,6 @@ if (typeof window !== 'undefined') window.getPhoneticCoachingPromptHint = getPho
 function renderPersonalWeaknessRadar() {
   if (typeof document === 'undefined') return;
   const convs = (typeof getConvs === 'function') ? (getConvs() || []) : [];
-  let totalRecords = 0;
-  convs.forEach(c => {
-    if (c && Array.isArray(c.records)) totalRecords += c.records.length;
-  });
   const weaknesses = analyzeUserPhonemeWeaknesses(convs, 30);
   const weakGuideKeys = new Set(weaknesses.map(it => it.guideKey).filter(Boolean));
 
@@ -469,14 +590,19 @@ function renderPersonalWeaknessRadar() {
     hintEl.textContent = '💡 AI 對話教練已自動鎖定高頻弱項音素，將於情境對話中自然融入對應英式詞彙。';
     radarBox.appendChild(hintEl);
     radarBox.classList.remove('hidden');
-  } else if (totalRecords > 0) {
-    const okEl = document.createElement('div');
-    okEl.style.cssText = 'color:#15803d;font-weight:500';
-    okEl.textContent = '✨ 最近跟讀表現理想，暫無低於 75 分的音素盲點！繼續保持地道英式語感。';
-    radarBox.appendChild(okEl);
-    radarBox.classList.remove('hidden');
   } else {
-    radarBox.classList.add('hidden');
+    const totalRecords = (typeof computeConvPracticeStats === 'function')
+      ? computeConvPracticeStats(convs).totalPracticeCount
+      : convs.reduce((sum, c) => sum + ((c && Array.isArray(c.records)) ? c.records.length : 0), 0);
+    if (totalRecords > 0) {
+      const okEl = document.createElement('div');
+      okEl.style.cssText = 'color:#15803d;font-weight:500';
+      okEl.textContent = '✨ 最近跟讀表現理想，暫無低於 75 分的音素盲點！繼續保持地道英式語感。';
+      radarBox.appendChild(okEl);
+      radarBox.classList.remove('hidden');
+    } else {
+      radarBox.classList.add('hidden');
+    }
   }
 }
 if (typeof window !== 'undefined') window.renderPersonalWeaknessRadar = renderPersonalWeaknessRadar;
@@ -550,6 +676,7 @@ let reviewAutoTimer = null;
 let pendingReviewAssessmentId = null;
 let phrasebookRenderLimit = 50;
 let phrasebookSearchQuery = '';
+let phrasebookSearchTimer = null;
 
 async function idbReviewGetAll() {
   try {
@@ -639,8 +766,8 @@ async function initReviewsStore() {
   updateDueBadge();
 }
 
-/* changedItems：只寫入這些卡片（增量）；不傳則全表同步（匯入 / 遷移用） */
-function persistReviewsCache(clearFirst = false, changedItems = null) {
+/* changedItems：只寫入這些卡片（增量）；不傳則全表同步（匯入 / 遷移用）；skipBadgeUpdate：緊接 renderReviewStudio 時免除重複徽章計算 */
+function persistReviewsCache(clearFirst = false, changedItems = null, skipBadgeUpdate = false) {
   if (reviewsIdbOk) {
     if (Array.isArray(changedItems) && !clearFirst) {
       changedItems.forEach(it => { if (it) idbReviewPut(it).catch(() => {}); });
@@ -651,7 +778,7 @@ function persistReviewsCache(clearFirst = false, changedItems = null) {
     try { localStorage.setItem(LS_REVIEWS, JSON.stringify(reviewsCache)); } catch (e) {}
     idbReviewsSyncBatch(reviewsCache, clearFirst).catch(() => {});
   }
-  updateDueBadge();
+  if (!skipBadgeUpdate) updateDueBadge();
 }
 
 async function addReviewItem({ text, translation, context, type, stage, score, overwriteTranslation }) {
@@ -667,7 +794,7 @@ async function addReviewItem({ text, translation, context, type, stage, score, o
     if (resolvedTrans && (overwriteTranslation || !existing.translation)) {
       existing.translation = resolvedTrans;
     }
-    persistReviewsCache(false, [existing]);
+    persistReviewsCache(false, [existing], true);
     renderReviewStudio();
     return existing;
   }
@@ -688,7 +815,7 @@ async function addReviewItem({ text, translation, context, type, stage, score, o
     history: []
   };
   reviewsCache.unshift(newItem);
-  persistReviewsCache(false, [newItem]);
+  persistReviewsCache(false, [newItem], true);
   renderReviewStudio();
   return newItem;
 }
@@ -696,7 +823,7 @@ async function addReviewItem({ text, translation, context, type, stage, score, o
 function deleteReviewItem(id) {
   reviewsCache = reviewsCache.filter(r => r.id !== id);
   idbReviewDel(id).catch(() => {});
-  persistReviewsCache(false, []);
+  persistReviewsCache(false, [], true);
   renderReviewStudio();
 }
 
@@ -746,8 +873,8 @@ function calcNextReview(item, rating) {
   };
 }
 
-function updateDueBadge() {
-  const dues = getDueReviews();
+function updateDueBadge(precomputedDues) {
+  const dues = Array.isArray(precomputedDues) ? precomputedDues : getDueReviews();
   const badge = document.getElementById('dueBadge');
   const countLabel = document.getElementById('dueCountLabel');
   if (badge) {
@@ -757,7 +884,11 @@ function updateDueBadge() {
   }
   if (countLabel) countLabel.textContent = dues.length;
 
-  const mastered = reviewsCache.filter(r => (r.reps || 0) >= 3 && (r.interval || 0) >= 14).length;
+  let mastered = 0;
+  for (let i = 0; i < reviewsCache.length; i++) {
+    const r = reviewsCache[i];
+    if (r && (r.reps || 0) >= 3 && (r.interval || 0) >= 14) mastered++;
+  }
   const masteredLabel = document.getElementById('masteredCountLabel');
   if (masteredLabel) masteredLabel.textContent = mastered;
 
@@ -768,10 +899,11 @@ function updateDueBadge() {
   const streakLabel = document.getElementById('streakDaysLabel');
   if (streakLabel) streakLabel.textContent = prog.streakDays || 1;
 }
+if (typeof window !== 'undefined') window.updateDueBadge = updateDueBadge;
 
-function renderReviewStudio() {
-  updateDueBadge();
-  const dues = getDueReviews();
+function renderReviewStudio(precomputedDues) {
+  const dues = Array.isArray(precomputedDues) ? precomputedDues : getDueReviews();
+  updateDueBadge(dues);
   const activeCard = document.getElementById('activeReviewCard');
   const emptyCard = document.getElementById('reviewEmptyCard');
 
@@ -789,35 +921,58 @@ function renderReviewStudio() {
   renderActiveReviewCard(activeReviewItem);
   renderPhrasebookList();
 }
+if (typeof window !== 'undefined') window.renderReviewStudio = renderReviewStudio;
+
+const CARD_PHONETIC_RULES = {
+  voicedTh: /\b(the|this|that|these|those|there|their|theirs|they|them|then|than|though|although|brother|mother|father|weather|leather|feather|together|breathe|with|either|neither|other|another|smooth)\b/i,
+  anyTh: /\b\w*th\w*\b/i,
+  vSound: /\b\w*v\w*\b/i,
+  darkL: /[aeiou]l(?![aeiou])/i,
+  longShortI: /(?:ee|ea)|\b(?:sheet|shit|beach|bitch|seat|sit|leave|live|ship|sheep)\b/i,
+  shortO: /\b(?:hot|cost|coffee|doctor|holiday|bottle|lot|pot|shop|clock|sock)\b/i,
+  glottalStop: /wa['']er|bo['']le|bu['']er/i
+};
 
 function detectCardPhoneticGuides(text) {
+  const rules = (typeof CARD_PHONETIC_RULES !== 'undefined')
+    ? CARD_PHONETIC_RULES
+    : (detectCardPhoneticGuides._rules || (detectCardPhoneticGuides._rules = {
+        voicedTh: /\b(the|this|that|these|those|there|their|theirs|they|them|then|than|though|although|brother|mother|father|weather|leather|feather|together|breathe|with|either|neither|other|another|smooth)\b/i,
+        anyTh: /\b\w*th\w*\b/i,
+        vSound: /\b\w*v\w*\b/i,
+        darkL: /[aeiou]l(?![aeiou])/i,
+        longShortI: /(?:ee|ea)|\b(?:sheet|shit|beach|bitch|seat|sit|leave|live|ship|sheep)\b/i,
+        shortO: /\b(?:hot|cost|coffee|doctor|holiday|bottle|lot|pot|shop|clock|sock)\b/i,
+        glottalStop: /wa['']er|bo['']le|bu['']er/i
+      }));
   const str = (text || '').toLowerCase();
   const guides = [];
-  const voicedThRegex = /\b(the|this|that|these|those|there|their|theirs|they|them|then|than|though|although|brother|mother|father|weather|leather|feather|together|breathe|with|either|neither|other|another|smooth)\b/i;
-  const hasTh = /\b\w*th\w*\b/i.test(str);
-  if (voicedThRegex.test(str) || str.includes('ð')) {
+  const isVoicedTh = rules.voicedTh.test(str);
+  const hasTh = rules.anyTh.test(str);
+  if (isVoicedTh || str.includes('ð')) {
     guides.push({ ph: 'ð', label: '👅 口型圖 /ð/' });
   }
-  if ((hasTh && !voicedThRegex.test(str)) || str.includes('θ')) {
+  if ((hasTh && !isVoicedTh) || str.includes('θ')) {
     guides.push({ ph: 'θ', label: '👅 口型圖 /θ/' });
   }
-  if (/\b\w*v\w*\b/i.test(str) || str.includes('v')) {
+  if (rules.vSound.test(str) || str.includes('v')) {
     guides.push({ ph: 'v', label: '👅 口型圖 /v/' });
   }
-  if (/[aeiou]l(?![aeiou])/i.test(str) || str.includes('ɫ') || str.includes('l_dark')) {
+  if (rules.darkL.test(str) || str.includes('ɫ') || str.includes('l_dark')) {
     guides.push({ ph: 'l_dark', label: '👅 口型圖 [ɫ]' });
   }
-  if (/(?:ee|ea)|\b(?:sheet|shit|beach|bitch|seat|sit|leave|live|ship|sheep)\b/i.test(str) || str.includes('iː') || str.includes('ɪ')) {
+  if (rules.longShortI.test(str) || str.includes('iː') || str.includes('ɪ')) {
     guides.push({ ph: 'iː', label: '👅 口型圖 /iː/' });
   }
-  if (/\b(?:hot|cost|coffee|doctor|holiday|bottle|lot|pot|shop|clock|sock)\b/i.test(str) || str.includes('ɒ')) {
+  if (rules.shortO.test(str) || str.includes('ɒ')) {
     guides.push({ ph: 'ɒ', label: '👅 口型圖 /ɒ/' });
   }
-  if (/wa['']er|bo['']le|bu['']er/i.test(str) || str.includes('ʔ')) {
+  if (rules.glottalStop.test(str) || str.includes('ʔ')) {
     guides.push({ ph: 'ʔ', label: '👅 口型圖 /ʔ/' });
   }
   return guides;
 }
+if (typeof window !== 'undefined') window.detectCardPhoneticGuides = detectCardPhoneticGuides;
 
 function renderActiveReviewCard(item) {
   const container = document.getElementById('reviewCardContent');
@@ -1032,25 +1187,58 @@ function applyReviewRating(item, rating, score) {
   if (idx !== -1) {
     reviewsCache[idx] = updated;
   }
-  persistReviewsCache(false, [updated]);
+  persistReviewsCache(false, [updated], true);
 
   const st = getProgressionState();
   st.dailyReviewsDone = (st.dailyReviewsDone || 0) + 1;
   saveProgressionState(st);
 
+  const remainingDues = getDueReviews();
   addProgressionXp(15, '完成語塊間隔重溫');
-  if (st.dailyReviewsDone >= 5 || getDueReviews().length === 0) {
+  if (st.dailyReviewsDone >= 5 || remainingDues.length === 0) {
     markDailyQuest('review');
   }
 
-  renderReviewStudio();
+  renderReviewStudio(remainingDues);
 }
 
 function renderPhrasebookList() {
   const container = document.getElementById('phrasebookList');
   if (!container) return;
+
+  // 事件委派：整個語塊本只掛載單一點擊監聽器，免除逐列閉包配置
+  if (!container._pbDelegated && typeof container.addEventListener === 'function') {
+    container._pbDelegated = true;
+    container.addEventListener('click', (ev) => {
+      const rawTarget = ev && ev.target;
+      let actBtn = null;
+      if (rawTarget && typeof rawTarget.closest === 'function') {
+        actBtn = rawTarget.closest('button[data-pb-act]');
+      } else if (rawTarget && ((rawTarget.getAttribute && rawTarget.getAttribute('data-pb-act')) || (rawTarget.dataset && rawTarget.dataset.pbAct))) {
+        actBtn = rawTarget;
+      }
+      if (!actBtn) return;
+      if (typeof container.contains === 'function' && !container.contains(actBtn)) return;
+      const act = (actBtn.getAttribute && actBtn.getAttribute('data-pb-act')) || (actBtn.dataset && actBtn.dataset.pbAct) || '';
+      if (act === 'more') {
+        phrasebookRenderLimit += 50;
+        renderPhrasebookList();
+        return;
+      }
+      const pbId = (actBtn.getAttribute && actBtn.getAttribute('data-pb-id')) || (actBtn.dataset && actBtn.dataset.pbId) || '';
+      if (!pbId) return;
+      if (act === 'play') {
+        const found = reviewsCache.find(r => String(r.id) === pbId);
+        if (found) playUkVoice(found.text);
+      } else if (act === 'del') {
+        deleteReviewItem(pbId);
+      }
+    });
+  }
+
   if (!reviewsCache.length) {
     container.innerHTML = '<div class="hint">您的語塊本還是空的。精讀或對話時，點擊「加入重溫」即可收錄。</div>';
+    if (Array.isArray(container.children)) container.children.length = 0;
     return;
   }
   const q = (phrasebookSearchQuery || '').trim().toLowerCase();
@@ -1063,14 +1251,23 @@ function renderPhrasebookList() {
     : reviewsCache;
 
   container.innerHTML = '';
+  if (Array.isArray(container.children)) container.children.length = 0;
   if (!filtered.length) {
     container.innerHTML = '<div class="hint">找不到符合搜尋條件的語塊。</div>';
     return;
   }
 
-  filtered.slice(0, phrasebookRenderLimit).forEach(item => {
+  const frag = (typeof document !== 'undefined' && typeof document.createDocumentFragment === 'function')
+    ? document.createDocumentFragment()
+    : null;
+  const mountTarget = frag || container;
+  const slice = filtered.slice(0, phrasebookRenderLimit);
+
+  for (let i = 0; i < slice.length; i++) {
+    const item = slice[i];
     const isMaster = (item.reps || 0) >= 3;
     const row = document.createElement('div');
+    row.className = 'phrasebook-item';
     row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:10px;border-bottom:1px solid #f1f5f9';
 
     const info = document.createElement('div');
@@ -1091,18 +1288,33 @@ function renderPhrasebookList() {
     badge.style.cssText = isMaster ? 'font-size:11px;padding:2px 6px;border-radius:4px;background:#dcfce7;color:#15803d' : 'font-size:11px;padding:2px 6px;border-radius:4px;background:#f1f5f9;color:#64748b';
     badge.textContent = isMaster ? '已掌握' : '溫習中';
 
+    const itemIdStr = String(item.id);
     const playBtn = document.createElement('button');
     playBtn.className = 'btn-sm';
     playBtn.textContent = '🔊';
     playBtn.type = 'button';
-    playBtn.onclick = () => playUkVoice(item.text);
+    if (playBtn.dataset) {
+      playBtn.dataset.pbAct = 'play';
+      playBtn.dataset.pbId = itemIdStr;
+    }
+    if (playBtn.setAttribute) {
+      playBtn.setAttribute('data-pb-act', 'play');
+      playBtn.setAttribute('data-pb-id', itemIdStr);
+    }
 
     const delBtn = document.createElement('button');
     delBtn.className = 'btn-sm danger';
     delBtn.style.padding = '2px 6px';
     delBtn.textContent = '✕';
     delBtn.type = 'button';
-    delBtn.onclick = () => deleteReviewItem(item.id);
+    if (delBtn.dataset) {
+      delBtn.dataset.pbAct = 'del';
+      delBtn.dataset.pbId = itemIdStr;
+    }
+    if (delBtn.setAttribute) {
+      delBtn.setAttribute('data-pb-act', 'del');
+      delBtn.setAttribute('data-pb-id', itemIdStr);
+    }
 
     actions.appendChild(badge);
     actions.appendChild(playBtn);
@@ -1110,8 +1322,8 @@ function renderPhrasebookList() {
 
     row.appendChild(info);
     row.appendChild(actions);
-    container.appendChild(row);
-  });
+    mountTarget.appendChild(row);
+  }
 
   if (filtered.length > phrasebookRenderLimit) {
     const moreWrap = document.createElement('div');
@@ -1121,14 +1333,15 @@ function renderPhrasebookList() {
     moreBtn.type = 'button';
     moreBtn.style.cssText = 'font-size:13px;padding:6px 16px';
     moreBtn.textContent = `⬇️ 載入更多（尚有 ${filtered.length - phrasebookRenderLimit} 筆語塊）`;
-    moreBtn.onclick = () => {
-      phrasebookRenderLimit += 50;
-      renderPhrasebookList();
-    };
+    if (moreBtn.dataset) moreBtn.dataset.pbAct = 'more';
+    if (moreBtn.setAttribute) moreBtn.setAttribute('data-pb-act', 'more');
     moreWrap.appendChild(moreBtn);
-    container.appendChild(moreWrap);
+    mountTarget.appendChild(moreWrap);
   }
+
+  if (frag) container.appendChild(frag);
 }
+if (typeof window !== 'undefined') window.renderPhrasebookList = renderPhrasebookList;
 
 function sanitizeAnkiField(val) {
   let s = esc(val || '').replace(/\t+/g, ' ').replace(/\r?\n/g, '<br>');
@@ -1273,7 +1486,7 @@ function importReviewsJson(file) {
           });
         }
         reviewsCache = sanitizedReviews;
-        persistReviewsCache(true);
+        persistReviewsCache(true, null, true);
       }
       if (hasProg) {
         const p = rawProgObj;
@@ -1312,6 +1525,7 @@ function importReviewsJson(file) {
           completedMissions: uniqMissions
         };
         localStorage.setItem(LS_PROGRESSION, JSON.stringify(sanitizedProg));
+        if (typeof invalidateProgressionCache === 'function') invalidateProgressionCache();
       }
       renderReviewStudio();
       renderStagesDashboard();
@@ -1476,16 +1690,57 @@ async function loadReadingPresets() {
 
 let connSpeechEnabled = false;
 
+const CONN_WEAK_WORDS_SET = new Set(['to', 'for', 'of', 'and', 'from', 'at', 'can', 'have', 'has', 'was', 'than', 'a', 'an']);
+const CONN_SPLIT_WS_RE = /(\s+)/;
+const CONN_HAS_WORD_RE = /\w+/;
+const CONN_TRIM_NON_ALPHA_RE = /^[^a-zA-Z']+|[^a-zA-Z']+$/g;
+const CONN_SENT_END_WORD_RE = /[.!?]["')\]]*$/;
+const CONN_SENT_END_SEP_RE = /[.!?]/;
+const CONN_LEAD_QUOTE_RE = /^["'(\[]+/;
+const CONN_ONLY_WS_RE = /^\s+$/;
+const CONN_LINK_R_PREV_RE = /^[a-zA-Z'-]*(?:r|re)$/i;
+const CONN_LINK_R_NEXT_RE = /^[aeiou]/i;
+const CONN_HTML_ESC_RE = /[&<>"']/g;
+const CONN_HTML_ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
 function annotateConnectedSpeech(sent, enabled) {
+  const c = (typeof CONN_WEAK_WORDS_SET !== 'undefined')
+    ? null
+    : (annotateConnectedSpeech._c || (annotateConnectedSpeech._c = {
+        weakSet: new Set(['to', 'for', 'of', 'and', 'from', 'at', 'can', 'have', 'has', 'was', 'than', 'a', 'an']),
+        splitWsRe: /(\s+)/,
+        hasWordRe: /\w+/,
+        trimNonAlphaRe: /^[^a-zA-Z']+|[^a-zA-Z']+$/g,
+        sentEndWordRe: /[.!?]["')\]]*$/,
+        sentEndSepRe: /[.!?]/,
+        leadQuoteRe: /^["'(\[]+/,
+        onlyWsRe: /^\s+$/,
+        linkRPrevRe: /^[a-zA-Z'-]*(?:r|re)$/i,
+        linkRNextRe: /^[aeiou]/i,
+        htmlEscRe: /[&<>"']/g,
+        htmlEscMap: { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }
+      }));
+  const weakSet = c ? c.weakSet : CONN_WEAK_WORDS_SET;
+  const splitWsRe = c ? c.splitWsRe : CONN_SPLIT_WS_RE;
+  const hasWordRe = c ? c.hasWordRe : CONN_HAS_WORD_RE;
+  const trimNonAlphaRe = c ? c.trimNonAlphaRe : CONN_TRIM_NON_ALPHA_RE;
+  const sentEndWordRe = c ? c.sentEndWordRe : CONN_SENT_END_WORD_RE;
+  const sentEndSepRe = c ? c.sentEndSepRe : CONN_SENT_END_SEP_RE;
+  const leadQuoteRe = c ? c.leadQuoteRe : CONN_LEAD_QUOTE_RE;
+  const onlyWsRe = c ? c.onlyWsRe : CONN_ONLY_WS_RE;
+  const linkRPrevRe = c ? c.linkRPrevRe : CONN_LINK_R_PREV_RE;
+  const linkRNextRe = c ? c.linkRNextRe : CONN_LINK_R_NEXT_RE;
+  const htmlEscRe = c ? c.htmlEscRe : CONN_HTML_ESC_RE;
+  const htmlEscMap = c ? c.htmlEscMap : CONN_HTML_ESC_MAP;
+
   const escFn = (typeof esc === 'function')
     ? esc
-    : (s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])));
-  const parts = String(sent == null ? '' : sent).split(/(\s+)/);
-  const weakSet = new Set(['to', 'for', 'of', 'and', 'from', 'at', 'can', 'have', 'has', 'was', 'than', 'a', 'an']);
+    : (s => String(s == null ? '' : s).replace(htmlEscRe, ch => htmlEscMap[ch]));
+  const parts = String(sent == null ? '' : sent).split(splitWsRe);
 
   let lastWordIdx = -1;
   for (let k = parts.length - 1; k >= 0; k--) {
-    if (/\w+/.test(parts[k])) {
+    if (hasWordRe.test(parts[k])) {
       lastWordIdx = k;
       break;
     }
@@ -1495,13 +1750,13 @@ function annotateConnectedSpeech(sent, enabled) {
   for (let i = 0; i < parts.length; i++) {
     const part = parts[i];
     if (!part) continue;
-    if (/\w+/.test(part)) {
+    if (hasWordRe.test(part)) {
       let cls = 'rd-word';
       let titleAttr = '';
       if (enabled) {
-        const cleanLower = part.replace(/^[^a-zA-Z']+|[^a-zA-Z']+$/g, '').toLowerCase();
+        const cleanLower = part.replace(trimNonAlphaRe, '').toLowerCase();
         const nextSep = parts[i + 1] || '';
-        const beforeSentEnd = (i === lastWordIdx) || /[.!?]["')\]]*$/.test(part) || /[.!?]/.test(nextSep);
+        const beforeSentEnd = (i === lastWordIdx) || sentEndWordRe.test(part) || sentEndSepRe.test(nextSep);
         if (weakSet.has(cleanLower) && !beforeSentEnd) {
           cls = 'rd-word rd-weak';
           titleAttr = ' title="英式虛詞弱讀 (Weak Form)：輕讀短促 /ə/"';
@@ -1511,12 +1766,12 @@ function annotateConnectedSpeech(sent, enabled) {
     } else {
       const prevPart = i > 0 ? parts[i - 1] : '';
       const nextPart = i + 1 < parts.length ? parts[i + 1] : '';
-      const prevClean = prevPart.replace(/^["'(\[]+/, '');
+      const prevClean = prevPart.replace(leadQuoteRe, '');
       const isLinkingR = enabled
-        && /^\s+$/.test(part)
+        && onlyWsRe.test(part)
         && prevClean.length >= 2
-        && /^[a-zA-Z'-]*(?:r|re)$/i.test(prevClean)
-        && /^[aeiou]/i.test(nextPart);
+        && linkRPrevRe.test(prevClean)
+        && linkRNextRe.test(nextPart);
       if (isLinkingR) {
         htmlOut += ' <span class="conn-link-r" title="英式連音 Linking R：詞尾 r 與下一個母音連讀">‿r</span> ';
       } else {
@@ -1707,49 +1962,146 @@ function stopShadowRadio(skipAudioStop) {
 }
 if (typeof window !== 'undefined') window.stopShadowRadio = stopShadowRadio;
 
+const PREHEAT_CONCURRENCY = 3;
+
+async function runPreheatPool(items, isAborted, onProgress) {
+  const list = Array.isArray(items) ? items : [];
+  const total = list.length;
+  if (!total) return { successCount: 0, completedCount: 0, aborted: false };
+  const ttsFn = (typeof window !== 'undefined' && window && typeof window.ttsCached === 'function')
+    ? window.ttsCached
+    : ((typeof ttsCached === 'function') ? ttsCached : null);
+  if (!ttsFn) return { successCount: 0, completedCount: 0, aborted: false };
+
+  const concurrency = (typeof PREHEAT_CONCURRENCY === 'number' && PREHEAT_CONCURRENCY > 0)
+    ? PREHEAT_CONCURRENCY
+    : 3;
+  const workerCount = Math.min(concurrency, total);
+  let nextIdx = 0;
+  let completedCount = 0;
+  let successCount = 0;
+  let aborted = false;
+
+  async function worker() {
+    while (nextIdx < total) {
+      if (typeof isAborted === 'function' && isAborted()) {
+        aborted = true;
+        return;
+      }
+      const idx = nextIdx++;
+      if (idx >= total) return;
+      const textItem = list[idx];
+      let ok = false;
+      try {
+        if (textItem) {
+          await ttsFn(textItem);
+          ok = true;
+        }
+      } catch (e) {}
+      if (typeof isAborted === 'function' && isAborted()) {
+        aborted = true;
+        return;
+      }
+      completedCount++;
+      if (ok) successCount++;
+      if (typeof onProgress === 'function') {
+        onProgress(completedCount, total, successCount);
+      }
+    }
+  }
+
+  const workers = [];
+  for (let w = 0; w < workerCount; w++) {
+    workers.push(worker());
+  }
+  await Promise.all(workers);
+  return { successCount, completedCount, aborted };
+}
+
 async function preheatReadingSentences() {
-  const btn = document.getElementById('preheatReadingBtn');
+  const btn = (typeof document !== 'undefined' && document.getElementById) ? document.getElementById('preheatReadingBtn') : null;
   if (!currentReadingSentences || !currentReadingSentences.length) {
     if (typeof alertDlg === 'function') alertDlg('請先輸入或載入要精讀的英語長文！');
     return;
   }
-  if (typeof ttsCached !== 'function') return;
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ 正在預熱...'; }
-  let successCount = 0;
-  for (let i = 0; i < currentReadingSentences.length; i++) {
-    const s = currentReadingSentences[i];
-    if (btn) btn.textContent = `⏳ 預熱中 (${i + 1}/${currentReadingSentences.length})...`;
-    try {
-      await ttsCached(s);
-      successCount++;
-    } catch (e) {}
-  }
+  const ttsFn = (typeof window !== 'undefined' && window && typeof window.ttsCached === 'function')
+    ? window.ttsCached
+    : ((typeof ttsCached === 'function') ? ttsCached : null);
+  if (!ttsFn) return;
+
+  const snapshot = currentReadingSentences.slice();
+  const total = snapshot.length;
   if (btn) {
-    btn.textContent = `✅ 已快取 ${successCount} 句至離線庫`;
-    setTimeout(() => {
+    btn.disabled = true;
+    btn.textContent = `⏳ 預熱中 (0/${total})...`;
+  }
+
+  const { successCount, aborted } = await runPreheatPool(
+    snapshot,
+    () => !currentReadingSentences || currentReadingSentences.length === 0,
+    (completed, totalItems) => {
+      if (btn) btn.textContent = `⏳ 預熱中 (${completed}/${totalItems})...`;
+    }
+  );
+
+  if (btn) {
+    if (aborted || !currentReadingSentences || currentReadingSentences.length === 0) {
       btn.disabled = false;
       btn.textContent = '⚡ 一鍵離線預熱';
-    }, 3000);
+    } else {
+      btn.textContent = `✅ 已快取 ${successCount} 句至離線庫`;
+      setTimeout(() => {
+        btn.disabled = false;
+        btn.textContent = '⚡ 一鍵離線預熱';
+      }, 3000);
+    }
   }
 }
 
-async function preheatDrillsPack() {
-  const btn = document.getElementById('preheatDrillsBtn');
-  if (!ukDrillsData || !ukDrillsData.length) return;
-  if (typeof ttsCached !== 'function') return;
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ 預熱中...'; }
-  
-  const allExamples = [];
-  ukDrillsData.forEach(d => (d.examples || []).forEach(ex => allExamples.push(ex.text)));
-  let successCount = 0;
-  for (let i = 0; i < allExamples.length; i++) {
-    const txt = allExamples[i];
-    if (btn) btn.textContent = `⏳ 預熱中 (${i + 1}/${allExamples.length})...`;
-    try {
-      await ttsCached(txt);
-      successCount++;
-    } catch (e) {}
+async function preheatDrillsPack(pack, btnEl) {
+  const btn = (btnEl && typeof btnEl === 'object')
+    ? btnEl
+    : ((typeof document !== 'undefined' && document.getElementById) ? document.getElementById('preheatDrillsBtn') : null);
+  let sourceDrills = ukDrillsData;
+  if (Array.isArray(pack)) {
+    sourceDrills = pack;
+  } else if (pack && typeof pack === 'object' && Array.isArray(pack.examples)) {
+    sourceDrills = [pack];
   }
+  if (!sourceDrills || !sourceDrills.length) return;
+  const ttsFn = (typeof window !== 'undefined' && window && typeof window.ttsCached === 'function')
+    ? window.ttsCached
+    : ((typeof ttsCached === 'function') ? ttsCached : null);
+  if (!ttsFn) return;
+
+  const allExamples = [];
+  sourceDrills.forEach(d => {
+    if (typeof d === 'string') {
+      allExamples.push(d);
+    } else if (d && Array.isArray(d.examples)) {
+      d.examples.forEach(ex => {
+        const txt = (typeof ex === 'string') ? ex : (ex && ex.text);
+        if (txt) allExamples.push(txt);
+      });
+    } else if (d && d.text) {
+      allExamples.push(d.text);
+    }
+  });
+  if (!allExamples.length) return;
+
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = `⏳ 預熱中 (0/${allExamples.length})...`;
+  }
+
+  const { successCount } = await runPreheatPool(
+    allExamples,
+    null,
+    (completed, totalItems) => {
+      if (btn) btn.textContent = `⏳ 預熱中 (${completed}/${totalItems})...`;
+    }
+  );
+
   if (btn) {
     btn.textContent = `✅ 已快取 ${successCount} 條特訓原聲`;
     setTimeout(() => {
@@ -1757,6 +2109,12 @@ async function preheatDrillsPack() {
       btn.textContent = '⚡ 預熱特訓包 (Tube Pack)';
     }, 3000);
   }
+}
+if (typeof window !== 'undefined') {
+  window.PREHEAT_CONCURRENCY = PREHEAT_CONCURRENCY;
+  window.runPreheatPool = runPreheatPool;
+  window.preheatReadingSentences = preheatReadingSentences;
+  window.preheatDrillsPack = preheatDrillsPack;
 }
 
 async function toggleShadowRadio() {
@@ -2139,6 +2497,8 @@ function showWordPopover(word, event, contextSentence) {
 
 let ukStagesData = [];
 let ukDrillsData = [];
+let _progressionCache = null;
+let _progressionDay = '';
 
 function localDayStr() {
   if (typeof usageDay === 'function') return usageDay();
@@ -2146,45 +2506,100 @@ function localDayStr() {
   return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
 }
 
+function invalidateProgressionCache() {
+  if (typeof _progressionCache !== 'undefined') {
+    _progressionCache = null;
+    _progressionDay = '';
+  }
+  if (typeof getProgressionState === 'function') {
+    getProgressionState._cache = null;
+    getProgressionState._day = '';
+  }
+}
+if (typeof window !== 'undefined') {
+  window.invalidateProgressionCache = invalidateProgressionCache;
+  if (typeof window.addEventListener === 'function') {
+    window.addEventListener('storage', (ev) => {
+      if (!ev || !ev.key || ev.key === LS_PROGRESSION) {
+        invalidateProgressionCache();
+      }
+    });
+  }
+}
+
 function getProgressionState() {
   const today = localDayStr();
+  const hasModCache = typeof _progressionCache !== 'undefined';
+  const cached = hasModCache ? _progressionCache : getProgressionState._cache;
+  const cachedDay = hasModCache ? _progressionDay : getProgressionState._day;
+  if (cached && cachedDay === today && cached.dailyDate === today) {
+    return cached;
+  }
+
+  let state = null;
   try {
     const raw = localStorage.getItem(LS_PROGRESSION);
     if (raw) {
-      const state = JSON.parse(raw);
-      if (typeof state.dailyReviewsDone !== 'number' || isNaN(state.dailyReviewsDone)) {
-        state.dailyReviewsDone = 0;
+      const parsed = JSON.parse(raw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        state = parsed;
+        if (typeof state.dailyReviewsDone !== 'number' || isNaN(state.dailyReviewsDone)) {
+          state.dailyReviewsDone = 0;
+        }
+        if (state.dailyDate !== today) {
+          const prevMs = Date.parse(state.dailyDate + 'T00:00:00Z');
+          const currMs = Date.parse(today + 'T00:00:00Z');
+          const diffDays = !isNaN(prevMs) ? Math.round((currMs - prevMs) / 86400000) : 0;
+          state.streakDays = diffDays === 1 ? (Number(state.streakDays) || 1) + 1 : 1;
+          state.dailyDate = today;
+          state.dailyReviewsDone = 0;
+          state.quests = { review: false, reading: false, chat: false };
+          saveProgressionState(state);
+          return state;
+        }
       }
-      if (state.dailyDate !== today) {
-        const prevMs = Date.parse(state.dailyDate + 'T00:00:00Z');
-        const currMs = Date.parse(today + 'T00:00:00Z');
-        const diffDays = !isNaN(prevMs) ? Math.round((currMs - prevMs) / 86400000) : 0;
-        state.streakDays = diffDays === 1 ? (Number(state.streakDays) || 1) + 1 : 1;
-        state.dailyDate = today;
-        state.dailyReviewsDone = 0;
-        state.quests = { review: false, reading: false, chat: false };
-        saveProgressionState(state);
-      }
-      return state;
     }
   } catch (e) {}
-  return {
-    xp: 60,
-    level: 1,
-    streakDays: 1,
-    dailyDate: today,
-    dailyReviewsDone: 0,
-    readingsCount: 0,
-    quests: { review: false, reading: false, chat: false },
-    completedMissions: []
-  };
+
+  if (!state) {
+    state = {
+      xp: 60,
+      level: 1,
+      streakDays: 1,
+      dailyDate: today,
+      dailyReviewsDone: 0,
+      readingsCount: 0,
+      quests: { review: false, reading: false, chat: false },
+      completedMissions: []
+    };
+  }
+
+  if (hasModCache) {
+    _progressionCache = state;
+    _progressionDay = today;
+  } else {
+    getProgressionState._cache = state;
+    getProgressionState._day = today;
+  }
+  return state;
 }
+if (typeof window !== 'undefined') window.getProgressionState = getProgressionState;
 
 function saveProgressionState(state) {
+  const today = localDayStr();
+  const effectiveDay = (state && typeof state.dailyDate === 'string') ? state.dailyDate : today;
+  if (typeof _progressionCache !== 'undefined') {
+    _progressionCache = state;
+    _progressionDay = effectiveDay;
+  } else if (typeof getProgressionState === 'function') {
+    getProgressionState._cache = state;
+    getProgressionState._day = effectiveDay;
+  }
   try {
     localStorage.setItem(LS_PROGRESSION, JSON.stringify(state));
   } catch (e) {}
 }
+if (typeof window !== 'undefined') window.saveProgressionState = saveProgressionState;
 
 function addProgressionXp(xp, reason) {
   const state = getProgressionState();
@@ -2193,6 +2608,7 @@ function addProgressionXp(xp, reason) {
   saveProgressionState(state);
   renderStagesDashboard();
 }
+if (typeof window !== 'undefined') window.addProgressionXp = addProgressionXp;
 
 function markDailyQuest(questKey) {
   const state = getProgressionState();
@@ -2442,36 +2858,28 @@ function renderStagesDashboard() {
     if (chBtn) chBtn.onclick = () => switchTab('practice');
   }
 
-  // Stage Targets Checklist
+  // Stage Targets Checklist（複用版本化記憶化統計，免除每次 XP 變動全量掃描數千筆練習紀錄）
   const targetsWrap = document.getElementById('stageTargetsList');
   if (targetsWrap && stageObj && stageObj.targets) {
-    let totalPracticeCount = 0, totalScore = 0, scoreCount = 0;
-    let totalFluency = 0, fluCount = 0;
-    let totalProsody = 0, proCount = 0;
-    if (typeof getConvs === 'function') {
-      try {
-        getConvs().forEach(c => (c.records || []).forEach(r => {
-          totalPracticeCount++;
-          if (typeof r.score === 'number' && r.score > 0) {
-            totalScore += r.score;
-            scoreCount++;
-          }
-          if (typeof r.fluency === 'number' && r.fluency > 0) {
-            totalFluency += r.fluency;
-            fluCount++;
-          }
-          if (typeof r.prosody === 'number' && r.prosody > 0) {
-            totalProsody += r.prosody;
-            proCount++;
-          }
-        }));
-      } catch (e) {}
-    }
-    const avgScore = scoreCount > 0 ? Math.round(totalScore / scoreCount) : 0;
-    const avgFluency = fluCount > 0 ? Math.round(totalFluency / fluCount) : avgScore;
-    const avgProsody = proCount > 0 ? Math.round(totalProsody / proCount) : avgScore;
+    let convStats = { totalPracticeCount: 0, avgScore: 0, avgFluency: 0, avgProsody: 0 };
+    try {
+      const liveConvs = (typeof getConvs === 'function')
+        ? getConvs()
+        : ((typeof window !== 'undefined' && window && typeof window.getConvs === 'function') ? window.getConvs() : []);
+      if (typeof computeConvPracticeStats === 'function') {
+        convStats = computeConvPracticeStats(liveConvs);
+      }
+    } catch (e) {}
+    const totalPracticeCount = convStats.totalPracticeCount;
+    const avgScore = convStats.avgScore;
+    const avgFluency = convStats.avgFluency;
+    const avgProsody = convStats.avgProsody;
     const reviewsCount = reviewsCache.length;
-    const masteredCount = reviewsCache.filter(r => (r.interval || 0) >= 21 || (r.reps || 0) >= 3).length;
+    let masteredCount = 0;
+    for (let i = 0; i < reviewsCache.length; i++) {
+      const r = reviewsCache[i];
+      if (r && ((r.interval || 0) >= 21 || (r.reps || 0) >= 3)) masteredCount++;
+    }
 
     const targets = stageObj.targets;
     const items = [];
@@ -2507,14 +2915,21 @@ function renderStagesDashboard() {
     }).join('');
   }
 
-  // 15 Stage Missions
+  // 15 Stage Missions（Set O(1) 查詢 + DocumentFragment 批次掛載）
   const missionsWrap = document.getElementById('stageMissionsList');
   if (missionsWrap && Array.isArray(ukStagesData) && ukStagesData.length) {
     const completed = state.completedMissions || [];
+    const completedSet = new Set(completed);
     const countEl = document.getElementById('stageMissionsProgress');
     if (countEl) countEl.textContent = `${completed.length} / 15 完成`;
 
     missionsWrap.innerHTML = '';
+    if (Array.isArray(missionsWrap.children)) missionsWrap.children.length = 0;
+    const missionsFrag = (typeof document !== 'undefined' && typeof document.createDocumentFragment === 'function')
+      ? document.createDocumentFragment()
+      : null;
+    const missionsMount = missionsFrag || missionsWrap;
+
     ukStagesData.forEach(stg => {
       const stgBlock = document.createElement('div');
       stgBlock.style.cssText = 'margin-bottom:12px';
@@ -2524,7 +2939,7 @@ function renderStagesDashboard() {
       stgBlock.appendChild(stgHeader);
 
       (stg.missions || []).forEach(m => {
-        const isDone = completed.includes(m.id);
+        const isDone = completedSet.has(m.id);
         const mRow = document.createElement('div');
         mRow.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:8px 10px;margin-bottom:6px;background:' + (isDone ? '#f0fdf4' : '#f8fafc') + ';border:1px solid ' + (isDone ? '#bbf7d0' : '#e2e8f0') + ';border-radius:6px;font-size:13px';
         mRow.innerHTML = `
@@ -2540,21 +2955,52 @@ function renderStagesDashboard() {
           </div>
           <button class="btn-sm" type="button" style="flex:none">${isDone ? '再次演練' : '🎯 挑戰'}</button>
         `;
-        mRow.querySelector('button').onclick = () => launchStageMission(m.id);
+        const actBtn = mRow.querySelector ? mRow.querySelector('button') : null;
+        if (actBtn) actBtn.onclick = () => launchStageMission(m.id);
         stgBlock.appendChild(mRow);
       });
-      missionsWrap.appendChild(stgBlock);
+      missionsMount.appendChild(stgBlock);
     });
+    if (missionsFrag) missionsWrap.appendChild(missionsFrag);
   }
 
   renderPersonalWeaknessRadar();
   renderDrillsAccordion();
 }
+if (typeof window !== 'undefined') window.renderStagesDashboard = renderStagesDashboard;
+
+let _drillsRenderedDataRef = null;
+let _drillsRenderedLang = '';
 
 function renderDrillsAccordion() {
   const container = document.getElementById('drillsAccordion');
-  if (!container || !ukDrillsData.length) return;
+  if (!container || !Array.isArray(ukDrillsData) || !ukDrillsData.length) return;
+
+  const settingsObj = (typeof peekSettings === 'function')
+    ? peekSettings()
+    : ((typeof getSettings === 'function') ? getSettings() : null);
+  const currentLang = (settingsObj && settingsObj.uiLang) ? settingsObj.uiLang : 'zh';
+  const hasModDrills = typeof _drillsRenderedDataRef !== 'undefined';
+  const prevDataRef = hasModDrills ? _drillsRenderedDataRef : renderDrillsAccordion._dataRef;
+  const prevLang = hasModDrills ? _drillsRenderedLang : renderDrillsAccordion._lang;
+  const hasChildren = (typeof container.childElementCount === 'number')
+    ? container.childElementCount > 0
+    : !!(container.children && container.children.length > 0);
+
+  if (ukDrillsData === prevDataRef && currentLang === prevLang && hasChildren) {
+    return;
+  }
+
   container.innerHTML = '';
+  if (Array.isArray(container.children)) container.children.length = 0;
+
+  const loadTxt = (typeof t === 'function')
+    ? t('sent.loadPractice')
+    : (currentLang === 'en' ? 'Load into Practice' : '載入句子練習');
+  const frag = (typeof document !== 'undefined' && typeof document.createDocumentFragment === 'function')
+    ? document.createDocumentFragment()
+    : null;
+  const mountTarget = frag || container;
 
   ukDrillsData.forEach(drill => {
     const block = document.createElement('div');
@@ -2567,7 +3013,7 @@ function renderDrillsAccordion() {
     block.appendChild(b);
     block.appendChild(p);
 
-    drill.examples.forEach(ex => {
+    (drill.examples || []).forEach(ex => {
       const exRow = document.createElement('div');
       exRow.className = 'drill-ex';
 
@@ -2594,12 +3040,8 @@ function renderDrillsAccordion() {
       shadowBtn.className = 'btn-sm';
       shadowBtn.textContent = '🎙️';
       shadowBtn.type = 'button';
-      const uiLang = (typeof peekSettings === 'function')
-        ? peekSettings().uiLang
-        : ((typeof getSettings === 'function') ? getSettings().uiLang : 'zh');
-      const loadTxt = (typeof t === 'function' ? t('sent.loadPractice') : (uiLang === 'en' ? 'Load into Practice' : '載入句子練習'));
       shadowBtn.title = loadTxt;
-      shadowBtn.setAttribute('aria-label', loadTxt);
+      if (shadowBtn.setAttribute) shadowBtn.setAttribute('aria-label', loadTxt);
       shadowBtn.onclick = () => drillShadowSentence(ex.text);
 
       btns.appendChild(playBtn);
@@ -2610,9 +3052,19 @@ function renderDrillsAccordion() {
       block.appendChild(exRow);
     });
 
-    container.appendChild(block);
+    mountTarget.appendChild(block);
   });
+
+  if (frag) container.appendChild(frag);
+  if (hasModDrills) {
+    _drillsRenderedDataRef = ukDrillsData;
+    _drillsRenderedLang = currentLang;
+  } else {
+    renderDrillsAccordion._dataRef = ukDrillsData;
+    renderDrillsAccordion._lang = currentLang;
+  }
 }
+if (typeof window !== 'undefined') window.renderDrillsAccordion = renderDrillsAccordion;
 
 function drillShadowSentence(text) {
   switchTab('practice');
@@ -2686,6 +3138,8 @@ function switchTab(tabId) {
 }
 
 function initUkSuite() {
+  if (typeof invalidateProgressionCache === 'function') invalidateProgressionCache();
+
   document.querySelectorAll('#appTabs .tab-btn').forEach(btn => {
     btn.onclick = () => switchTab(btn.dataset.tab);
   });
@@ -2698,10 +3152,28 @@ function initUkSuite() {
 
   const pbSearch = document.getElementById('phrasebookSearch');
   if (pbSearch) {
+    if (typeof phrasebookSearchTimer !== 'undefined' && phrasebookSearchTimer) {
+      clearTimeout(phrasebookSearchTimer);
+      phrasebookSearchTimer = null;
+    }
     pbSearch.oninput = () => {
-      phrasebookSearchQuery = pbSearch.value || '';
-      phrasebookRenderLimit = 50;
-      renderPhrasebookList();
+      if (typeof phrasebookSearchTimer !== 'undefined' && phrasebookSearchTimer) {
+        clearTimeout(phrasebookSearchTimer);
+        phrasebookSearchTimer = null;
+      }
+      const nextVal = pbSearch.value || '';
+      if (nextVal === '') {
+        phrasebookSearchQuery = '';
+        phrasebookRenderLimit = 50;
+        renderPhrasebookList();
+        return;
+      }
+      phrasebookSearchTimer = setTimeout(() => {
+        phrasebookSearchTimer = null;
+        phrasebookSearchQuery = pbSearch.value || '';
+        phrasebookRenderLimit = 50;
+        renderPhrasebookList();
+      }, 120);
     };
   }
 
