@@ -1,9 +1,10 @@
 /* 英國英語口語練習 Service Worker
  * 作用：滿足 Chrome PWA 可安裝要求（必須有帶 fetch 處理的 SW）+ 弱網/離線兜底。
- * 策略：本站 GET 請求走網路優先（帶超時競速），失敗或弱網超時時讀快取；API 與 CDN 請求不攔截。
- * 注意：更新 index.html 後刷新頁面即生效，無需手動清快取。
+ * 策略：本站 GET 請求走網絡優先（帶超時競速與 AbortController 中止），失敗或弱網超時時讀快取；
+ *       同時防禦公共 Wi-Fi Captive Portal 將 text/html 寫入非 HTML 資產快取；API 與 CDN 請求不攔截。
+ * 注意：更新 index.html 後重新整理頁面即生效，無需手動清快取。
  */
-const CACHE = 'sprechmate-uk-v10';
+const CACHE = 'sprechmate-uk-v11';
 const ASSETS = [
   './',
   'index.html',
@@ -21,7 +22,7 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', (e) => {
-  // 打卡照片不再於安裝時預下載（約 40 張）：首次使用時由下方 fetch 處理器按需快取
+  // 打卡相片不再於安裝時預下載（約 40 張）：首次使用時由下方 fetch 處理器按需快取
   e.waitUntil(
     caches.open(CACHE).then((c) => c.addAll(ASSETS)).then(() => self.skipWaiting())
   );
@@ -37,22 +38,61 @@ self.addEventListener('activate', (e) => {
 
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
-  // 只接管本站 GET（页面 / manifest / 图标）；API 与 CDN 直接放行
+  // 只接管本站 GET（頁面 / manifest / 圖示）；API 與 CDN 直接放行
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  const isNav = e.request.mode === 'navigate';
-  const timeoutMs = isNav ? 3000 : 4000;
 
-  const networkFetch = fetch(e.request).then((res) => {
-    if (res && res.ok && res.status === 200 && !url.search) {
-      const copy = res.clone();
-      caches.open(CACHE).then((c) => c.put(e.request, copy));
+  const isNav = e.request.mode === 'navigate';
+  const expectsHtml = isNav || url.pathname.endsWith('/') || url.pathname.endsWith('.html');
+  const timeoutMs = isNav ? 3000 : 4000;
+  const ac = new AbortController();
+  let timerId = null;
+  let settledFromCache = false;
+
+  const getCachedFallback = () =>
+    caches.match(e.request, { ignoreSearch: isNav }).then((cached) => {
+      if (cached) return cached;
+      if (isNav) return caches.match('index.html');
+      return null;
+    });
+
+  const networkFetch = fetch(e.request, { signal: ac.signal }).then((res) => {
+    const contentType = (
+      (res && res.headers && typeof res.headers.get === 'function' && res.headers.get('content-type')) || ''
+    ).toLowerCase();
+    const isHtmlResp = contentType.includes('text/html');
+
+    // 防禦公共 Wi-Fi Captive Portal 將 HTML 登入頁偽裝成 JS/CSS/JSON/圖片回傳並污染快取
+    if (!expectsHtml && isHtmlResp) {
+      return getCachedFallback().then((cached) => {
+        if (cached) return cached;
+        return new Response('Unexpected HTML response blocked for non-HTML asset', {
+          status: 502,
+          statusText: 'Bad Gateway'
+        });
+      });
+    }
+
+    const isSafeType = res && (res.type === 'basic' || res.type === 'default' || res.type === undefined);
+    if (
+      res &&
+      res.ok &&
+      res.status === 200 &&
+      isSafeType &&
+      !res.redirected &&
+      !url.search &&
+      !settledFromCache &&
+      (expectsHtml || !isHtmlResp)
+    ) {
+      const clone = res.clone();
+      e.waitUntil(
+        caches.open(CACHE).then((c) => c.put(e.request, clone)).catch(() => {})
+      );
     }
     return res;
   });
-  // 避免在超時 fallback 快取後，背景 networkFetch 失敗拋出未捕獲異常
+  // 避免在超時 fallback 快取並 abort 後，背景 networkFetch 拋出未捕獲異常
   networkFetch.catch(() => {});
 
-  let timerId = null;
   const timeoutPromise = new Promise((_, reject) => {
     timerId = setTimeout(() => reject(new Error('Network timeout')), timeoutMs);
   });
@@ -60,10 +100,13 @@ self.addEventListener('fetch', (e) => {
 
   e.respondWith(
     Promise.race([networkFetch, timeoutPromise]).catch(() =>
-      caches.match(e.request, { ignoreSearch: isNav }).then((r) => {
-        if (r) return r;
-        if (isNav) return caches.match('index.html');
-        return new Response('Offline', { status: 503, statusText: 'Offline' });
+      getCachedFallback().then((cached) => {
+        if (cached) {
+          settledFromCache = true;
+          ac.abort();
+          return cached;
+        }
+        return networkFetch.catch(() => new Response('Offline', { status: 503, statusText: 'Offline' }));
       })
     )
   );
