@@ -293,7 +293,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
 .btn-sm:active{opacity:.65}
 
 /* 雙擊單詞浮窗 */
-.word-popover{position:absolute;z-index:99;background:#1e293b;color:#fff;padding:8px 12px;border-radius:8px;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:4px}
+.word-popover{position:absolute;z-index:99;max-width:300px;background:#1e293b;color:#fff;padding:8px 12px;border-radius:8px;font-size:12px;box-shadow:0 4px 12px rgba(0,0,0,.2);display:flex;flex-direction:column;gap:4px}
 .word-popover b{color:#38bdf8;font-size:14px}
 
 /* 重溫卡片樣式 */
@@ -338,6 +338,12 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
 .drill-block b{color:var(--pri);display:block;margin-bottom:4px}
 .drill-block p{font-size:12px;color:var(--mut);margin:0 0 6px}
 .drill-ex{display:flex;justify-content:space-between;align-items:center;padding:4px 0;font-size:13px;border-top:1px dashed #e2e8f0}
+.mission-banner{background:linear-gradient(135deg,#eff6ff,#f5f3ff);border:1px solid #c7d2fe;padding:10px 14px}
+.conn-link-r{color:#7c3aed;font-weight:700;font-size:12px;padding:0 1px;user-select:none}
+.rd-word.rd-weak{color:#64748b;border-bottom:1px dashed #94a3b8}
+.btn-sm.active-toggle{background:#ede9fe;border-color:#8b5cf6;color:#6d28d9;font-weight:600}
+.personal-radar-box{margin-bottom:10px;padding:10px 12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;font-size:12px}
+.weakness-chip.is-personal-weak{border-color:#ea580c;background:#ffedd5;color:#9a3412;font-weight:600}
 </style>
 </head>
 <body>
@@ -375,6 +381,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
       <button id="keyGuideBtn" class="key-guide-go" data-i18n="guide.go">前往設定</button>
       <button id="keyGuideX" class="key-guide-x" aria-label="關閉">✕</button>
     </div>
+    <div id="activeMissionBanner" class="card mission-banner hidden"></div>
     <div class="card">
       <div class="chat-head"><select id="convPromptSel" class="conv-prompt-sel" data-i18n-title="chat.promptTitle" title="目前對話使用的提示詞範本"></select><button id="newChatBtn2" class="linkbtn" data-i18n="chat.new">＋ 新對話</button></div>
       <div id="chatList" class="chat-list"></div>
@@ -472,7 +479,8 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
           <span id="readingWordCount">共 0 詞</span> · 
           <span id="readingSentenceCount">0 個語塊</span>
         </div>
-        <div style="display:flex;gap:6px">
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <button id="toggleConnSpeechBtn" class="btn-sm" type="button" title="標註英式連音 Linking R (‿r) 與虛詞弱讀 Weak Forms">🔗 連音標註</button>
           <button id="preheatReadingBtn" class="btn-sm" type="button" title="依序將全文高音質原聲快取至本機 IndexedDB，地鐵離線照常聆聽">⚡ 一鍵離線預熱</button>
           <button id="shadowRadioBtn" class="btn-sm" type="button" title="自動連播全文並在每句後預留影子跟讀時間">🎧 影子連播電台</button>
         </div>
@@ -564,6 +572,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
     <div class="card">
       <h3 style="margin-bottom:4px">👅 港人常見發音弱點與向量口型圖解</h3>
       <p class="mut" style="font-size:12px;margin-bottom:10px">點擊以下任一音素，即可查看專屬的【純向量 SVG 牙齒與舌位解剖剖面圖】：</p>
+      <div id="personalWeaknessRadar" class="personal-radar-box hidden"></div>
       <div class="weakness-chips">
         <button class="weakness-chip" data-ph="θ">/θ/ (think, through)</button>
         <button class="weakness-chip" data-ph="ð">/ð/ (this, brother)</button>
@@ -796,7 +805,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
         <button id="resetSettingsBtn" type="button" class="danger" data-i18n="set.resetSet">還原預設設定</button>
       </div>
     </div>
-    <div class="ver"><span data-i18n="set.version">版本</span> v1.4.0 · <a class="ver-link" href="https://github.com/SunnyChan1010/sprechmate-uk" target="_blank" rel="noopener">GitHub</a></div>
+    <div class="ver"><span data-i18n="set.version">版本</span> v1.6.0 · <a class="ver-link" href="https://github.com/SunnyChan1010/sprechmate-uk" target="_blank" rel="noopener">GitHub</a></div>
   </section>
 
   <!-- ================= 視覺化口型與舌位圖解彈窗 ================= -->
@@ -828,8 +837,10 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
     <b id="popoverWord">word</b>
     <span id="popoverPh" style="color:#94a3b8;font-size:11px">/wɜːd/</span>
     <span id="popoverDef" style="font-size:12px;line-height:1.4">釋義載入中…</span>
-    <div style="display:flex;gap:6px;margin-top:4px">
+    <div id="popoverAiResult" class="hidden" style="margin-top:6px;padding:6px 8px;background:#1e293b;border-radius:6px;font-size:12px;line-height:1.45;color:#e2e8f0;border-left:3px solid #a78bfa"></div>
+    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
       <button id="popoverHearBtn" class="btn-sm" type="button">🔊 朗讀</button>
+      <button id="popoverAiBtn" class="btn-sm" type="button" title="結合原句語境由 AI 解析英式地道用法">✨ AI 語境精解</button>
       <button id="popoverAddBtn" class="btn-sm" type="button">⭐ 加至重溫</button>
       <button id="popoverCloseBtn" class="btn-sm" type="button">✕</button>
     </div>
@@ -2272,7 +2283,15 @@ function getConvs() { return convsCache || []; }
 function saveConvs(c) {
   convsCache = c;
   if (!convsLoaded) return; // 尚未完成 IndexedDB 初始載入：嚴禁覆寫磁碟資料
-  idbSet(IDB_CONVS_KEY, JSON.stringify(c)).catch(e => {
+  const payload = JSON.stringify(c);
+  return idbSet(IDB_CONVS_KEY, payload).catch(async err => {
+    if (err && (err.name === 'QuotaExceededError' || /quota/i.test(err.message || ''))) {
+      try {
+        await trimTtsCache(Math.max(5, Math.floor(getSettings().ttsCacheLimit / 2)));
+        await idbSet(IDB_CONVS_KEY, payload);
+        return;
+      } catch (retryErr) {}
+    }
     // 存满了：不自动删用户数据，只提示一次（内存里的数据本次还能用）
     if (!convsSaveWarned) {
       convsSaveWarned = true;
@@ -2748,7 +2767,7 @@ function resetChatUsage() {
    （total = prompt + completion + reasoning，官方按输出计价），此时把 reasoning 并入输出；
    OpenAI 系 reasoning 已含在 completion 内（total = prompt + completion），不重复加 */
 function trackChatFromUsage(j) {
-  const u = j && j.usage;
+  const u = (j && j.usage) || j;
   if (!u || typeof u.prompt_tokens !== 'number') return false;
   const p = u.prompt_tokens;
   const c = u.completion_tokens || 0;
@@ -3835,7 +3854,9 @@ async function sendChatCore(c) {
     renderConvList(); renderChat();
 
     const base = s.chatBaseUrl.replace(/\/+$/, '');
-    const apiMsgs = [{ role: 'system', content: convPrompt(c).content }]
+    const phHint = (typeof window.getPhoneticCoachingPromptHint === 'function') ? (window.getPhoneticCoachingPromptHint() || '') : '';
+    const sysText = convPrompt(c).content + (phHint ? '\n' + phHint : '');
+    const apiMsgs = [{ role: 'system', content: sysText }]
       .concat(c.messages.filter(m => m.content && m.content !== '…').map(m => ({ role: m.role, content: m.content })));
     // 流式请求（SSE）：OpenAI 兼容接口通用（附带 AbortSignal 防弱网死锁）
     const res = await fetch(base + '/chat/completions', {
@@ -4007,6 +4028,154 @@ async function testChat() {
     msg.textContent = t('chat.testFail', { msg: e.message });
   }
 }
+
+/* F3：15 大生存任務與 AI 情境劇本雙向聯動 */
+async function activateMissionRoleplay(tplId, openerText, autoSend) {
+  const s = getSettings();
+  const tpls = s.promptTemplates || [];
+  const pt = tpls.find(x => x.id === tplId) || tpls.find(x => x.id === 'default') || tpls[0];
+  if (!pt) return;
+  let c = activeConv();
+  if (!c) {
+    newConversation();
+    c = activeConv();
+  }
+  if (c && c.messages && c.messages.length > 0 && c.promptId !== pt.id) {
+    newConversation();
+    c = activeConv();
+  }
+  if (!c) return;
+  c.promptId = pt.id;
+  c.promptName = pt.name;
+  c.promptContent = pt.content;
+  persistConv(c);
+  refreshConvPromptSel();
+  renderConvList();
+  renderChat();
+  const input = $('chatInput');
+  if (openerText && input) {
+    input.value = openerText;
+    autoGrowTextarea(input);
+  }
+  const chatHead = document.querySelector('.chat-head');
+  if (chatHead && chatHead.scrollIntoView) {
+    chatHead.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  if (autoSend && String(getSettings().chatKey || '').trim()) {
+    await sendChat();
+  } else if (input && input.focus) {
+    input.focus();
+  }
+}
+window.activateMissionRoleplay = activateMissionRoleplay;
+
+/* F4：精讀查詞彈窗「✨ AI 語境精解」 */
+async function askAiContextualExplain(word, contextSentence, signal) {
+  const s = getSettings();
+  if (!s.chatBaseUrl || !s.chatModel || !s.chatKey) {
+    throw new Error(s.uiLang === 'en' ? 'Please set your Chat API Key in Settings first.' : '請先於右上角「⚙️ 設定」填妥對話 API Key');
+  }
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new Error(s.uiLang === 'en' ? 'Offline mode: AI explanation requires network.' : '目前處於離線狀態，AI 語境精解需要網絡連線');
+  }
+  const cleanW = String(word || '').trim().slice(0, 60);
+  const ctxSent = String(contextSentence || '').trim().slice(0, 400);
+  if (!cleanW) {
+    throw new Error(s.uiLang === 'en' ? 'No word selected.' : '未選取有效單詞');
+  }
+  const base = s.chatBaseUrl.replace(/\/+$/, '');
+  const ctrl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctrl.abort();
+  }, 12000);
+  const onCallerAbort = () => ctrl.abort();
+  if (signal) {
+    if (signal.aborted) {
+      clearTimeout(timer);
+      ctrl.abort();
+    } else if (typeof signal.addEventListener === 'function') {
+      signal.addEventListener('abort', onCallerAbort, { once: true });
+    }
+  }
+  const sysPrompt = s.uiLang === 'en'
+    ? 'You are a British English (RP / Modern SSBE) lexical coach. Reply ONLY with a single-line JSON object {"ipa":"/…/","meaning":"…","tip":"…"} without markdown fences. Give RP IPA, concise meaning in sentence context (<35 words), and authentic UK usage/register tip (<25 words).'
+    : '你是地道英國英語（RP / Modern SSBE）詞彙教練。請僅輸出單行純 JSON 物件 {"ipa":"/…/","meaning":"…","tip":"…"}，不要加 Markdown 程式碼區塊。請使用香港繁體中文（zh-HK），提供英式 RP 國際音標、該詞在原句語境下的精準釋義（40字內），以及地道英式用法或語氣提示（35字內）。';
+  const userPrompt = ctxSent
+    ? ('Word: "' + cleanW + '"\nSentence context: "' + ctxSent + '"')
+    : ('Word: "' + cleanW + '"');
+  let res;
+  try {
+    res = await fetch(base + '/chat/completions', {
+      method: 'POST',
+      headers: chatHeaders(s.chatKey, base),
+      signal: ctrl.signal,
+      body: JSON.stringify({
+        model: s.chatModel,
+        stream: false,
+        temperature: 0.3,
+        max_tokens: 260,
+        messages: [
+          { role: 'system', content: sysPrompt },
+          { role: 'user', content: userPrompt }
+        ]
+      })
+    });
+  } catch (fetchErr) {
+    if (timedOut) {
+      throw new Error(s.uiLang === 'en' ? 'AI explanation timed out (12s). Please try again.' : 'AI 語境精解連線逾時（12秒），請稍後重試');
+    }
+    throw fetchErr;
+  } finally {
+    clearTimeout(timer);
+    if (signal && typeof signal.removeEventListener === 'function') {
+      signal.removeEventListener('abort', onCallerAbort);
+    }
+  }
+  if (!res.ok) {
+    const errTxt = await res.text().catch(() => '');
+    let em = t('chat.reqFail');
+    try {
+      const ej = JSON.parse(errTxt);
+      em = ej && ej.error ? (ej.error.message || JSON.stringify(ej.error)) : errTxt;
+    } catch (parseErr) {
+      if (errTxt) em = errTxt;
+    }
+    throw new Error('HTTP ' + res.status + t('misc.colon') + String(em).slice(0, 160));
+  }
+  const j = await res.json();
+  if (j && j.usage) trackChatFromUsage(j.usage);
+  const ch = j && j.choices && j.choices[0];
+  const rawContent = ch && ch.message && ch.message.content;
+  const rawText = String(Array.isArray(rawContent) ? rawContent.map(part => (part && part.text) || '').join('') : (rawContent || '')).trim();
+  let cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  const braceMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (braceMatch) cleaned = braceMatch[0];
+  let parsed = null;
+  try {
+    parsed = cleaned ? JSON.parse(cleaned) : null;
+  } catch (jsonErr) {
+    parsed = null;
+  }
+  let ipa = '', meaning = '', tip = '';
+  if (parsed && typeof parsed === 'object') {
+    ipa = String(parsed.ipa || '').trim();
+    meaning = String(parsed.meaning || '').trim();
+    tip = String(parsed.tip || '').trim();
+  }
+  if (!meaning) {
+    const fallbackPlain = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+    meaning = fallbackPlain.slice(0, 180);
+  }
+  const fmtParts = [];
+  if (ipa) fmtParts.push(ipa);
+  if (meaning) fmtParts.push(meaning);
+  if (tip) fmtParts.push((s.uiLang === 'en' ? 'UK Tip: ' : '英式用法：') + tip);
+  const formatted = fmtParts.join(' · ');
+  return { ipa: ipa, meaning: meaning, tip: tip, formatted: formatted };
+}
+window.askAiContextualExplain = askAiContextualExplain;
 
 /* ================= 选中句子 → 自动生成原声 ================= */
 /* 文本框随内容自动增高，不出现滚动条 */
@@ -5339,6 +5508,8 @@ let lastRefText = '';
 function simplifyWords(pa) {
   return ((pa.detailResult && pa.detailResult.Words) || []).map(w => ({
     w: w.Word || '',
+    o: Number(w.Offset) || 0,
+    d: Number(w.Duration) || 0,
     score: Math.round((w.PronunciationAssessment && w.PronunciationAssessment.AccuracyScore) || 0),
     err: (w.PronunciationAssessment && w.PronunciationAssessment.ErrorType) || 'None',
     phonemes: (w.Phonemes || []).map(p => ({
@@ -5389,6 +5560,8 @@ function paLikeFromRec(rec) {
     detailResult: {
       Words: (rec.words || []).map(w => ({
         Word: w.w,
+        Offset: Number(w.o) || 0,
+        Duration: Number(w.d) || 0,
         PronunciationAssessment: { AccuracyScore: w.score, ErrorType: w.err },
         Phonemes: (w.phonemes || []).map(p => ({
           Phoneme: p.p,
@@ -5408,6 +5581,8 @@ async function restoreRecord(convId, recId) {
   if (!rec) return;
   $('sentenceText').value = rec.text;
   autoGrowTextarea($('sentenceText'));
+  lastUserPcm16 = null;
+  lastRefBlob = null;
   renderResult(paLikeFromRec(rec), rec.recognizedText || '', true);
   try {
     // 原声就是 TTS：先兼容旧版本存的 ref:，没有则走 TTS 缓存（一般命中，不调 API）
@@ -5428,6 +5603,8 @@ async function restoreRecord(convId, recId) {
       if (myRecordingUrl) URL.revokeObjectURL(myRecordingUrl);
       myRecordingUrl = URL.createObjectURL(myBlob);
       myPlayer.load(myRecordingUrl, false);
+      lastUserPcm16 = await decodeToPcm16k(myBlob);
+      await drawProsodyMirror(paLikeFromRec(rec).detailResult.Words);
     }
   } catch (e) {}
   $('recordCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
