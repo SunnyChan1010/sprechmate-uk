@@ -48,4 +48,4 @@ scriptBlocks.forEach((match, idx) => {
 });
 console.log(`✓ HTML inline scripts OK (${scriptBlocks.length})`);
 
-console.log('ALL SYNTAX CHECKS PASSED');
+console.log('ALL SYNTAX CHECKS PASSED.');

@@ -284,7 +284,7 @@ test('Service Worker: ASSETS 預快取清單中所有檔案必須存在於本地
   const swCode = fs.readFileSync(path.join(root, 'sw.js'), 'utf8');
   const m = swCode.match(/const ASSETS = \[([\s\S]*?)\];/);
   assert.ok(m, 'sw.js 必須包含 ASSETS 陣列');
-  const assets = new Function(`return [${m[1]}];`)();
+  const assets = vm.runInNewContext(`[${m[1]}]`);
   assets.forEach(asset => {
     if (asset !== './') {
       const filePath = path.join(root, asset);
@@ -314,7 +314,7 @@ test('uk_stages.json: 完整涵蓋 15 大生存任務且 UK_STAGE_MISSION_OPENER
   // 驗證 uk_engine.js 內的 UK_STAGE_MISSION_OPENERS 涵蓋所有任務
   const openerMatch = engine.match(/const UK_STAGE_MISSION_OPENERS = \{([\s\S]*?)\};/);
   assert.ok(openerMatch, 'uk_engine.js 必須定義 UK_STAGE_MISSION_OPENERS');
-  const openers = new Function(`return {${openerMatch[1]}};`)();
+  const openers = vm.runInNewContext(`({${openerMatch[1]}})`);
   missionIds.forEach(id => {
     assert.ok(openers[id], `Mission ${id} 缺少對應開場白`);
     assert.ok(openers[id].length > 10, `Mission ${id} 開場白長度不足`);
@@ -374,7 +374,7 @@ test('calcEnvelope: 靜音無 NaN、音訊能量精確歸一化為 60 格包絡'
   const envSrc = extractFunction(html, 'drawProsodyMirror');
   const m = envSrc.match(/const calcEnvelope = ([\s\S]*?\n  \});/);
   assert.ok(m, 'drawProsodyMirror 內必須包含 calcEnvelope 定義');
-  const envFn = new Function(`return (${m[1].replace(/;\s*$/, '')});`)();
+  const envFn = vm.runInNewContext(`(${m[1].replace(/;\s*$/, '')})`, { Int16Array, Float32Array, Math });
 
   // 1. 空或全靜音 PCM
   const silentPcm = new Int16Array(16000);
@@ -943,7 +943,7 @@ test('F3 UK_STAGE_MISSION_PROMPTS & DOM: 完整映射 m1..m15 至合法劇本 ID
 
   const promptMapMatch = engine.match(/const UK_STAGE_MISSION_PROMPTS = \{([\s\S]*?)\};/);
   assert.ok(promptMapMatch, 'uk_engine.js 必須定義 UK_STAGE_MISSION_PROMPTS');
-  const promptMap = new Function(`return {${promptMapMatch[1]}};`)();
+  const promptMap = vm.runInNewContext(`({${promptMapMatch[1]}})`);
 
   const tplCtx = load([
     extractFunction(html, 'ukGpPromptName'),
