@@ -318,6 +318,169 @@ function closePhoneticModal() {
   if (modal) modal.classList.add('hidden');
 }
 
+function analyzeUserPhonemeWeaknesses(convs, maxRecords) {
+  if (!Array.isArray(convs)) return [];
+  const resolveKey = (typeof resolvePhoneticGuideKey === 'function')
+    ? resolvePhoneticGuideKey
+    : (sym => {
+        if (!sym) return null;
+        const s = String(sym).toLowerCase().replace(/[\/\[\]]/g, '').trim();
+        if (s === 'θ') return 'θ';
+        if (s === 'ð') return 'ð';
+        if (s === 'v' || s === 'w') return 'v';
+        if (s === 'l' || s === 'ɫ' || s === 'l_dark') return 'l_dark';
+        if (s === 'iː' || s === 'ɪ' || s === 'i:' || s === 'i') return 'iː';
+        if (s === 'ɒ' || s === 'ɔː' || s === 'ɔ:' || s === 'o') return 'ɒ';
+        if (s === 'ʔ') return 'ʔ';
+        return null;
+      });
+
+  const allRecords = [];
+  convs.forEach(conv => {
+    if (conv && Array.isArray(conv.records)) {
+      conv.records.forEach(rec => {
+        if (rec && Array.isArray(rec.words)) allRecords.push(rec);
+      });
+    }
+  });
+  allRecords.sort((a, b) => (Number(b.t) || 0) - (Number(a.t) || 0));
+  const limit = (typeof maxRecords === 'number' && maxRecords > 0) ? maxRecords : 30;
+  const recent = allRecords.slice(0, limit);
+
+  const statsMap = Object.create(null);
+  recent.forEach(rec => {
+    (rec.words || []).forEach(wordObj => {
+      if (!wordObj || !Array.isArray(wordObj.phonemes)) return;
+      const wordStr = String(wordObj.w || '').trim();
+      wordObj.phonemes.forEach(phObj => {
+        if (!phObj) return;
+        const ph = String(phObj.p || '').trim();
+        const sc = phObj.s;
+        if (!ph || typeof sc !== 'number' || !(sc > 0 && sc < 75)) return;
+        if (!statsMap[ph]) {
+          statsMap[ph] = {
+            count: 0,
+            scoreSum: 0,
+            confusions: Object.create(null),
+            sampleWords: []
+          };
+        }
+        const entry = statsMap[ph];
+        entry.count += 1;
+        entry.scoreSum += sc;
+        const heard = phObj.h ? String(phObj.h).trim() : '';
+        if (heard && heard !== ph) {
+          entry.confusions[heard] = (entry.confusions[heard] || 0) + 1;
+        }
+        if (wordStr && entry.sampleWords.length < 3 && !entry.sampleWords.some(sw => sw.toLowerCase() === wordStr.toLowerCase())) {
+          entry.sampleWords.push(wordStr);
+        }
+      });
+    });
+  });
+
+  const results = Object.keys(statsMap).map(phoneme => {
+    const entry = statsMap[phoneme];
+    let topConfusedWith = null;
+    let topConfusedCount = 0;
+    Object.keys(entry.confusions).forEach(hKey => {
+      const cnt = entry.confusions[hKey];
+      if (cnt > topConfusedCount) {
+        topConfusedCount = cnt;
+        topConfusedWith = hKey;
+      }
+    });
+    return {
+      phoneme,
+      guideKey: resolveKey(phoneme),
+      count: entry.count,
+      avgScore: Math.round(entry.scoreSum / entry.count),
+      topConfusedWith,
+      topConfusedCount,
+      sampleWords: entry.sampleWords
+    };
+  });
+
+  results.sort((a, b) => {
+    if (b.count !== a.count) return b.count - a.count;
+    if (a.avgScore !== b.avgScore) return a.avgScore - b.avgScore;
+    return a.phoneme.localeCompare(b.phoneme);
+  });
+
+  return results;
+}
+if (typeof window !== 'undefined') window.analyzeUserPhonemeWeaknesses = analyzeUserPhonemeWeaknesses;
+
+function getPhoneticCoachingPromptHint() {
+  const convs = (typeof getConvs === 'function') ? (getConvs() || []) : [];
+  const weaknesses = analyzeUserPhonemeWeaknesses(convs, 30);
+  const topItems = weaknesses.filter(it => it.count >= 2).slice(0, 2);
+  if (!topItems.length) return '';
+  return '[Phonetic Coaching Target]: Based on recent pronunciation assessments, the learner frequently struggles with '
+    + topItems.map(it => '/' + it.phoneme + '/' + (it.topConfusedWith ? ' (confused with /' + it.topConfusedWith + '/)' : '')).join(' and ')
+    + '. Naturally weave 1-2 everyday British words containing these target sounds into your reply while staying in character.';
+}
+if (typeof window !== 'undefined') window.getPhoneticCoachingPromptHint = getPhoneticCoachingPromptHint;
+
+function renderPersonalWeaknessRadar() {
+  if (typeof document === 'undefined') return;
+  const convs = (typeof getConvs === 'function') ? (getConvs() || []) : [];
+  let totalRecords = 0;
+  convs.forEach(c => {
+    if (c && Array.isArray(c.records)) totalRecords += c.records.length;
+  });
+  const weaknesses = analyzeUserPhonemeWeaknesses(convs, 30);
+  const weakGuideKeys = new Set(weaknesses.map(it => it.guideKey).filter(Boolean));
+
+  document.querySelectorAll('.weakness-chip').forEach(chip => {
+    const phKey = chip.dataset ? chip.dataset.ph : '';
+    chip.classList.toggle('is-personal-weak', !!(phKey && weakGuideKeys.has(phKey)));
+  });
+
+  const radarBox = document.getElementById('personalWeaknessRadar');
+  if (!radarBox) return;
+  radarBox.innerHTML = '';
+
+  if (weaknesses.length > 0) {
+    const headerEl = document.createElement('div');
+    headerEl.style.cssText = 'font-weight:600;color:#9a3412;margin-bottom:6px';
+    headerEl.textContent = '🔥 您的個人高頻發音盲點雷達（基於最近練習）：';
+    radarBox.appendChild(headerEl);
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;flex-wrap:wrap;gap:6px;align-items:center';
+    weaknesses.slice(0, 3).forEach(it => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-sm';
+      btn.style.cssText = 'border-color:#fdba74;background:#ffffff;color:#9a3412;font-size:12px';
+      const confLabel = it.topConfusedWith ? `（常誤讀為 /${it.topConfusedWith}/）` : '';
+      btn.textContent = `/${it.phoneme}/${confLabel} · ${it.count}次 · 均分 ${it.avgScore}`;
+      if (it.sampleWords && it.sampleWords.length) {
+        btn.title = '常見失誤詞：' + it.sampleWords.join(', ') + '（點擊查看口型圖解）';
+      }
+      btn.onclick = () => showPhoneticModal(it.guideKey || it.phoneme, (it.sampleWords && it.sampleWords[0]) || '');
+      btnRow.appendChild(btn);
+    });
+    radarBox.appendChild(btnRow);
+
+    const hintEl = document.createElement('div');
+    hintEl.style.cssText = 'font-size:11px;color:#c2410c;margin-top:6px';
+    hintEl.textContent = '💡 AI 對話教練已自動鎖定高頻弱項音素，將於情境對話中自然融入對應英式詞彙。';
+    radarBox.appendChild(hintEl);
+    radarBox.classList.remove('hidden');
+  } else if (totalRecords > 0) {
+    const okEl = document.createElement('div');
+    okEl.style.cssText = 'color:#15803d;font-weight:500';
+    okEl.textContent = '✨ 最近跟讀表現理想，暫無低於 75 分的音素盲點！繼續保持地道英式語感。';
+    radarBox.appendChild(okEl);
+    radarBox.classList.remove('hidden');
+  } else {
+    radarBox.classList.add('hidden');
+  }
+}
+if (typeof window !== 'undefined') window.renderPersonalWeaknessRadar = renderPersonalWeaknessRadar;
+
 /* ================= 英國在地化：間隔重複重溫引擎 (SM-2 Spaced Repetition) ================= */
 
 const LS_REVIEWS = 'uk_reviews_deck';
@@ -491,7 +654,7 @@ function persistReviewsCache(clearFirst = false, changedItems = null) {
   updateDueBadge();
 }
 
-async function addReviewItem({ text, translation, context, type, stage, score }) {
+async function addReviewItem({ text, translation, context, type, stage, score, overwriteTranslation }) {
   if (!text || !text.trim()) return;
   const cleanText = text.trim();
   const resolvedTrans = (translation && translation.trim())
@@ -501,7 +664,9 @@ async function addReviewItem({ text, translation, context, type, stage, score })
   if (existing) {
     existing.dueDate = Date.now();
     if (score) existing.lastScore = score;
-    if (!existing.translation && resolvedTrans) existing.translation = resolvedTrans;
+    if (resolvedTrans && (overwriteTranslation || !existing.translation)) {
+      existing.translation = resolvedTrans;
+    }
     persistReviewsCache(false, [existing]);
     renderReviewStudio();
     return existing;
@@ -869,8 +1034,14 @@ function applyReviewRating(item, rating, score) {
   }
   persistReviewsCache(false, [updated]);
 
+  const st = getProgressionState();
+  st.dailyReviewsDone = (st.dailyReviewsDone || 0) + 1;
+  saveProgressionState(st);
+
   addProgressionXp(15, '完成語塊間隔重溫');
-  markDailyQuest('review');
+  if (st.dailyReviewsDone >= 5 || getDueReviews().length === 0) {
+    markDailyQuest('review');
+  }
 
   renderReviewStudio();
 }
@@ -1052,6 +1223,7 @@ function importReviewsJson(file) {
           level: Math.min(4, Math.max(1, Number(p.level) || 1)),
           streakDays: Math.max(1, Number(p.streakDays) || 1),
           dailyDate: String(p.dailyDate || new Date().toISOString().slice(0, 10)),
+          dailyReviewsDone: Math.max(0, Number(p.dailyReviewsDone) || 0),
           readingsCount: Math.max(0, Number(p.readingsCount) || 0),
           quests: p.quests || { review: false, reading: false, chat: false },
           completedMissions: Array.isArray(p.completedMissions) ? p.completedMissions : []
@@ -1217,6 +1389,60 @@ async function loadReadingPresets() {
   }
 }
 
+let connSpeechEnabled = false;
+
+function annotateConnectedSpeech(sent, enabled) {
+  const escFn = (typeof esc === 'function')
+    ? esc
+    : (s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])));
+  const parts = String(sent == null ? '' : sent).split(/(\s+)/);
+  const weakSet = new Set(['to', 'for', 'of', 'and', 'from', 'at', 'can', 'have', 'has', 'was', 'than', 'a', 'an']);
+
+  let lastWordIdx = -1;
+  for (let k = parts.length - 1; k >= 0; k--) {
+    if (/\w+/.test(parts[k])) {
+      lastWordIdx = k;
+      break;
+    }
+  }
+
+  let htmlOut = '';
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i];
+    if (!part) continue;
+    if (/\w+/.test(part)) {
+      let cls = 'rd-word';
+      let titleAttr = '';
+      if (enabled) {
+        const cleanLower = part.replace(/^[^a-zA-Z']+|[^a-zA-Z']+$/g, '').toLowerCase();
+        const nextSep = parts[i + 1] || '';
+        const beforeSentEnd = (i === lastWordIdx) || /[.!?]["')\]]*$/.test(part) || /[.!?]/.test(nextSep);
+        if (weakSet.has(cleanLower) && !beforeSentEnd) {
+          cls = 'rd-word rd-weak';
+          titleAttr = ' title="英式虛詞弱讀 (Weak Form)：輕讀短促 /ə/"';
+        }
+      }
+      htmlOut += `<span class="${cls}" style="cursor:pointer"${titleAttr}>${escFn(part)}</span>`;
+    } else {
+      const prevPart = i > 0 ? parts[i - 1] : '';
+      const nextPart = i + 1 < parts.length ? parts[i + 1] : '';
+      const prevClean = prevPart.replace(/^["'(\[]+/, '');
+      const isLinkingR = enabled
+        && /^\s+$/.test(part)
+        && prevClean.length >= 2
+        && /^[a-zA-Z'-]*(?:r|re)$/i.test(prevClean)
+        && /^[aeiou]/i.test(nextPart);
+      if (isLinkingR) {
+        htmlOut += ' <span class="conn-link-r" title="英式連音 Linking R：詞尾 r 與下一個母音連讀">‿r</span> ';
+      } else {
+        htmlOut += escFn(part);
+      }
+    }
+  }
+  return htmlOut;
+}
+if (typeof window !== 'undefined') window.annotateConnectedSpeech = annotateConnectedSpeech;
+
 function initReadingStudio() {
   loadReadingPresets().then(() => {
     const sel = document.getElementById('readingPresetSel');
@@ -1252,6 +1478,20 @@ function initReadingStudio() {
     clearBtn.onclick = () => {
       document.getElementById('readingInput').value = '';
       document.getElementById('readingStudioCard').classList.add('hidden');
+    };
+  }
+
+  const toggleConnBtn = document.getElementById('toggleConnSpeechBtn');
+  if (toggleConnBtn) {
+    toggleConnBtn.classList.toggle('active-toggle', connSpeechEnabled);
+    toggleConnBtn.textContent = connSpeechEnabled ? '🔗 連音標註：開' : '🔗 連音標註';
+    toggleConnBtn.onclick = () => {
+      connSpeechEnabled = !connSpeechEnabled;
+      toggleConnBtn.classList.toggle('active-toggle', connSpeechEnabled);
+      toggleConnBtn.textContent = connSpeechEnabled ? '🔗 連音標註：開' : '🔗 連音標註';
+      if (currentReadingSentences.length) {
+        renderReadingStudio(currentReadingSentences);
+      }
     };
   }
 
@@ -1292,7 +1532,7 @@ let isShadowRadioActive = false;
 let shadowRadioTimer = null;
 let shadowRadioResolver = null;
 
-function stopShadowRadio() {
+function stopShadowRadio(skipAudioStop) {
   if (!isShadowRadioActive && !shadowRadioTimer && !shadowRadioResolver) return;
   isShadowRadioActive = false;
   if (shadowRadioTimer) {
@@ -1304,7 +1544,7 @@ function stopShadowRadio() {
     shadowRadioResolver = null;
     res();
   }
-  if (typeof stopCurrentUkAudio === 'function') stopCurrentUkAudio();
+  if (!skipAudioStop && typeof stopCurrentUkAudio === 'function') stopCurrentUkAudio();
   document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
   const btn = document.getElementById('shadowRadioBtn');
   if (btn) btn.textContent = '🎧 影子連播電台';
@@ -1379,6 +1619,7 @@ async function toggleShadowRadio() {
   if (btn) btn.textContent = '⏹️ 停止電台連播';
   rewardReadingEngagement();
 
+  let wasInterruptedExternally = false;
   for (let i = 0; i < currentReadingSentences.length; i++) {
     if (!isShadowRadioActive) break;
     const sent = currentReadingSentences[i];
@@ -1388,24 +1629,35 @@ async function toggleShadowRadio() {
       item.classList.add('playing');
       item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     }
-    
-    await playUkVoice(sent);
-    if (!isShadowRadioActive) break;
+    if (btn) {
+      btn.textContent = '🔊 朗讀中 (' + (i + 1) + '/' + currentReadingSentences.length + ')… — 點擊停止';
+    }
+
+    const playRes = await playUkVoice(sent);
+    if (!isShadowRadioActive || (playRes && playRes.interrupted)) {
+      if (playRes && playRes.interrupted) wasInterruptedExternally = true;
+      break;
+    }
 
     const wordCount = sent.split(/\s+/).filter(Boolean).length;
-    const playMs = Math.max(2000, wordCount * 380);
-    const shadowDelayMs = Math.round(playMs * 1.2);
-    
+    const baseMs = (playRes && playRes.durationMs > 400) ? playRes.durationMs : Math.max(1800, wordCount * 360);
+    const shadowDelayMs = Math.max(1800, Math.min(12000, Math.round(baseMs * 1.15)));
+
+    if (btn) {
+      btn.textContent = '🎙️ 請跟讀 (' + (i + 1) + '/' + currentReadingSentences.length + ')… — 點擊停止';
+    }
+
     await new Promise(resolve => {
       shadowRadioResolver = resolve;
       shadowRadioTimer = setTimeout(() => {
+        shadowRadioTimer = null;
         shadowRadioResolver = null;
         resolve();
-      }, playMs + shadowDelayMs);
+      }, shadowDelayMs);
     });
   }
 
-  stopShadowRadio();
+  stopShadowRadio(wasInterruptedExternally);
 }
 
 function analyzeReadingText(rawText) {
@@ -1442,15 +1694,7 @@ function renderReadingStudio(sentences) {
     item.className = 'reading-sentence-item';
     item.id = 'rd-item-' + idx;
 
-    const words = sent.split(/(\s+)/);
-    let wrappedHtml = '';
-    words.forEach(w => {
-      if (/\w+/.test(w)) {
-        wrappedHtml += `<span class="rd-word" style="cursor:pointer">${esc(w)}</span>`;
-      } else {
-        wrappedHtml += esc(w);
-      }
-    });
+    const wrappedHtml = annotateConnectedSpeech(sent, connSpeechEnabled);
 
     item.innerHTML = `
       <div style="display:flex;justify-content:space-between;margin-bottom:4px">
@@ -1500,17 +1744,93 @@ function renderReadingStudio(sentences) {
   });
 }
 
+const aiWordExplainCache = new Map();
+let popoverAiAbort = null;
+let popoverHideTimer = null;
+
+function cancelPopoverPending() {
+  if (popoverAiAbort) {
+    try { popoverAiAbort.abort(); } catch (e) {}
+    popoverAiAbort = null;
+  }
+  if (popoverHideTimer) {
+    clearTimeout(popoverHideTimer);
+    popoverHideTimer = null;
+  }
+}
+
+function buildAiCardNote(info, aiRes, contextSentence) {
+  if (!aiRes) return info.fullTranslation;
+  const ipaPart = aiRes.ipa ? aiRes.ipa : (info.ipa || '');
+  const meaningPart = aiRes.meaning ? aiRes.meaning : (aiRes.formatted || '');
+  if (!meaningPart) return info.fullTranslation;
+  const tipPart = aiRes.tip ? (' ｜ 💡 ' + aiRes.tip) : '';
+  const ctxPart = contextSentence ? (' · 原句：「' + contextSentence.slice(0, 90) + (contextSentence.length > 90 ? '…' : '') + '」') : '';
+  return ((ipaPart ? ipaPart + ' ' : '') + meaningPart + tipPart + ctxPart).trim();
+}
+
+function renderPopoverAiExplanation(container, aiRes) {
+  if (!container || !aiRes) return;
+  container.innerHTML = '';
+  if (aiRes.ipa) {
+    const ipaLine = document.createElement('div');
+    ipaLine.style.cssText = 'color:#c4b5fd;font-size:11px;margin-bottom:2px';
+    ipaLine.textContent = '🇬🇧 語境音標：' + aiRes.ipa;
+    container.appendChild(ipaLine);
+  }
+  if (aiRes.meaning) {
+    const mLine = document.createElement('div');
+    mLine.style.cssText = 'font-weight:600;color:#f8fafc;margin-bottom:2px';
+    mLine.textContent = '✨ 語境釋義：' + aiRes.meaning;
+    container.appendChild(mLine);
+  }
+  if (aiRes.tip) {
+    const tipLine = document.createElement('div');
+    tipLine.style.cssText = 'color:#cbd5e1;font-size:11px';
+    tipLine.textContent = '💡 英式用法：' + aiRes.tip;
+    container.appendChild(tipLine);
+  }
+  if (!aiRes.meaning && !aiRes.tip && aiRes.formatted) {
+    const rawLine = document.createElement('div');
+    rawLine.textContent = aiRes.formatted;
+    container.appendChild(rawLine);
+  }
+  container.classList.remove('hidden');
+}
+
 function showWordPopover(word, event, contextSentence) {
   const popover = document.getElementById('wordPopover');
   if (!popover) return;
   const cleanWord = word.replace(/[^a-zA-Z'-]/g, '').slice(0, 50);
   if (!cleanWord) return;
 
+  cancelPopoverPending();
+
   const info = lookupUkWord(cleanWord, contextSentence);
+  const cacheKey = cleanWord.toLowerCase() + '||' + (contextSentence || '').slice(0, 120);
+  const cachedAi = aiWordExplainCache.get(cacheKey) || null;
+  let hasAiExplain = !!cachedAi;
+  let activeCardNote = cachedAi ? buildAiCardNote(info, cachedAi, contextSentence) : info.fullTranslation;
+  let wasAdded = false;
 
   document.getElementById('popoverWord').textContent = cleanWord;
-  document.getElementById('popoverPh').textContent = info.ipa;
+  document.getElementById('popoverPh').textContent = (cachedAi && cachedAi.ipa) ? cachedAi.ipa : info.ipa;
   document.getElementById('popoverDef').textContent = info.def;
+
+  const aiResEl = document.getElementById('popoverAiResult');
+  const aiBtn = document.getElementById('popoverAiBtn');
+  if (aiBtn) {
+    aiBtn.disabled = false;
+    aiBtn.textContent = '✨ AI 語境精解';
+  }
+  if (aiResEl) {
+    if (cachedAi) {
+      renderPopoverAiExplanation(aiResEl, cachedAi);
+    } else {
+      aiResEl.innerHTML = '';
+      aiResEl.classList.add('hidden');
+    }
+  }
 
   const addBtn = document.getElementById('popoverAddBtn');
   if (addBtn) {
@@ -1519,21 +1839,111 @@ function showWordPopover(word, event, contextSentence) {
   }
 
   document.getElementById('popoverHearBtn').onclick = () => playUkVoice(cleanWord);
-  document.getElementById('popoverAddBtn').onclick = async () => {
-    await addReviewItem({
-      text: cleanWord,
-      translation: info.fullTranslation,
-      context: contextSentence ? `精讀語境: ${contextSentence.slice(0, 65)}${contextSentence.length > 65 ? '…' : ''}` : '精讀生詞',
-      type: 'collocation',
-      stage: 2
-    });
-    if (addBtn) {
+  if (addBtn) {
+    addBtn.onclick = async () => {
+      wasAdded = true;
+      await addReviewItem({
+        text: cleanWord,
+        translation: activeCardNote,
+        context: contextSentence ? `精讀語境: ${contextSentence.slice(0, 65)}${contextSentence.length > 65 ? '…' : ''}` : '精讀生詞',
+        type: 'collocation',
+        stage: 2,
+        overwriteTranslation: hasAiExplain
+      });
       addBtn.textContent = '✅ 已收錄';
       addBtn.disabled = true;
-    }
-    setTimeout(() => popover.classList.add('hidden'), 450);
+      if (!popoverAiAbort) {
+        if (popoverHideTimer) clearTimeout(popoverHideTimer);
+        popoverHideTimer = setTimeout(() => {
+          popoverHideTimer = null;
+          popover.classList.add('hidden');
+        }, 450);
+      }
+    };
+  }
+
+  if (aiBtn) {
+    aiBtn.onclick = async () => {
+      if (popoverHideTimer) {
+        clearTimeout(popoverHideTimer);
+        popoverHideTimer = null;
+      }
+      const existingCached = aiWordExplainCache.get(cacheKey);
+      if (existingCached) {
+        hasAiExplain = true;
+        activeCardNote = buildAiCardNote(info, existingCached, contextSentence);
+        if (existingCached.ipa) {
+          const phEl = document.getElementById('popoverPh');
+          if (phEl) phEl.textContent = existingCached.ipa;
+        }
+        if (aiResEl) renderPopoverAiExplanation(aiResEl, existingCached);
+        if (addBtn && (wasAdded || addBtn.disabled)) {
+          addBtn.disabled = false;
+          addBtn.textContent = '⭐ 更新重溫筆記';
+        }
+        return;
+      }
+
+      if (popoverAiAbort) {
+        try { popoverAiAbort.abort(); } catch (e) {}
+      }
+      const ctrl = new AbortController();
+      popoverAiAbort = ctrl;
+
+      aiBtn.disabled = true;
+      aiBtn.textContent = '⏳ 解析中…';
+      if (aiResEl) {
+        aiResEl.innerHTML = '';
+        aiResEl.textContent = '⏳ AI 正在結合原句解析英式用法…';
+        aiResEl.classList.remove('hidden');
+      }
+
+      try {
+        if (typeof window === 'undefined' || typeof window.askAiContextualExplain !== 'function') {
+          throw new Error('AI 語境精解服務尚未就緒');
+        }
+        const aiRes = await window.askAiContextualExplain(cleanWord, contextSentence || '', ctrl.signal);
+        if (ctrl.signal.aborted) return;
+        if (aiWordExplainCache.size >= 200) {
+          const oldestKey = aiWordExplainCache.keys().next().value;
+          if (oldestKey !== undefined) aiWordExplainCache.delete(oldestKey);
+        }
+        aiWordExplainCache.set(cacheKey, aiRes);
+        hasAiExplain = true;
+        activeCardNote = buildAiCardNote(info, aiRes, contextSentence);
+        if (aiRes && aiRes.ipa) {
+          const phEl = document.getElementById('popoverPh');
+          if (phEl) phEl.textContent = aiRes.ipa;
+        }
+        if (aiResEl) renderPopoverAiExplanation(aiResEl, aiRes);
+        aiBtn.disabled = false;
+        aiBtn.textContent = '✨ AI 語境精解';
+        if (addBtn && (wasAdded || addBtn.disabled)) {
+          addBtn.disabled = false;
+          addBtn.textContent = '⭐ 更新重溫筆記';
+        }
+      } catch (err) {
+        if (ctrl.signal.aborted || (err && err.name === 'AbortError')) return;
+        aiBtn.disabled = false;
+        aiBtn.textContent = '✨ AI 語境精解';
+        if (aiResEl) {
+          aiResEl.innerHTML = '';
+          const errSpan = document.createElement('span');
+          errSpan.style.color = '#fca5a5';
+          errSpan.textContent = '⚠️ ' + ((err && err.message) ? err.message : 'AI 語境解析暫時無法使用，請檢查網絡或 API 設定');
+          aiResEl.appendChild(errSpan);
+          aiResEl.classList.remove('hidden');
+        }
+      } finally {
+        if (popoverAiAbort === ctrl) popoverAiAbort = null;
+      }
+    };
+  }
+
+  document.getElementById('popoverCloseBtn').onclick = () => {
+    cancelPopoverPending();
+    popover.classList.add('hidden');
   };
-  document.getElementById('popoverCloseBtn').onclick = () => popover.classList.add('hidden');
 
   const rect = event && event.target && event.target.getBoundingClientRect
     ? event.target.getBoundingClientRect()
@@ -1541,7 +1951,7 @@ function showWordPopover(word, event, contextSentence) {
   const pageX = rect.left + window.scrollX;
   const pageY = rect.bottom + window.scrollY;
 
-  popover.style.left = Math.min(window.innerWidth - 260, Math.max(10, pageX - 40)) + 'px';
+  popover.style.left = Math.min(window.innerWidth - 300, Math.max(10, pageX - 40)) + 'px';
   popover.style.top = (pageY + 8) + 'px';
   popover.classList.remove('hidden');
 }
@@ -1563,12 +1973,16 @@ function getProgressionState() {
     const raw = localStorage.getItem(LS_PROGRESSION);
     if (raw) {
       const state = JSON.parse(raw);
+      if (typeof state.dailyReviewsDone !== 'number' || isNaN(state.dailyReviewsDone)) {
+        state.dailyReviewsDone = 0;
+      }
       if (state.dailyDate !== today) {
         const prevMs = Date.parse(state.dailyDate + 'T00:00:00Z');
         const currMs = Date.parse(today + 'T00:00:00Z');
         const diffDays = !isNaN(prevMs) ? Math.round((currMs - prevMs) / 86400000) : 0;
         state.streakDays = diffDays === 1 ? (Number(state.streakDays) || 1) + 1 : 1;
         state.dailyDate = today;
+        state.dailyReviewsDone = 0;
         state.quests = { review: false, reading: false, chat: false };
         saveProgressionState(state);
       }
@@ -1580,7 +1994,10 @@ function getProgressionState() {
     level: 1,
     streakDays: 1,
     dailyDate: today,
-    quests: { review: false, reading: false, chat: false }
+    dailyReviewsDone: 0,
+    readingsCount: 0,
+    quests: { review: false, reading: false, chat: false },
+    completedMissions: []
   };
 }
 
@@ -1602,7 +2019,8 @@ function markDailyQuest(questKey) {
   const state = getProgressionState();
   if (state.quests && !state.quests[questKey]) {
     state.quests[questKey] = true;
-    state.xp += 35;
+    const bonusXp = questKey === 'review' ? 30 : 35;
+    state.xp = (state.xp || 0) + bonusXp;
     state.level = state.xp >= 2500 ? 4 : state.xp >= 1000 ? 3 : state.xp >= 300 ? 2 : 1;
     saveProgressionState(state);
     renderStagesDashboard();
@@ -1638,15 +2056,110 @@ const UK_STAGE_MISSION_OPENERS = {
   m15: "The recent economic forecast raises fundamental questions about long-term fiscal policy and public sector investment in the UK."
 };
 
+const UK_STAGE_MISSION_PROMPTS = {
+  m1: 'default', m2: 'default', m3: 'default', m4: 'default',
+  m5: 'uk_gp', m6: 'uk_council', m7: 'uk_council', m8: 'uk_council',
+  m9: 'uk_tenancy', m10: 'uk_tenancy', m11: 'default', m12: 'uk_reading',
+  m13: 'uk_banter', m14: 'uk_banter', m15: 'uk_reading'
+};
+if (typeof window !== 'undefined') window.UK_STAGE_MISSION_PROMPTS = UK_STAGE_MISSION_PROMPTS;
+
 let activeStageMissionId = null;
 if (typeof window !== 'undefined') window.activeStageMissionId = null;
 
+function renderActiveMissionBanner() {
+  if (typeof document === 'undefined') return;
+  const banner = document.getElementById('activeMissionBanner');
+  if (!banner) return;
+  if (!activeStageMissionId) {
+    banner.innerHTML = '';
+    banner.classList.add('hidden');
+    return;
+  }
+
+  let missionTitle = '英國實戰任務 ' + String(activeStageMissionId).toUpperCase();
+  let missionXp = 30;
+  if (Array.isArray(ukStagesData)) {
+    for (const stg of ukStagesData) {
+      const found = (stg.missions || []).find(m => m.id === activeStageMissionId);
+      if (found) {
+        missionTitle = found.title || missionTitle;
+        missionXp = found.xp || 30;
+        break;
+      }
+    }
+  }
+  const tplId = UK_STAGE_MISSION_PROMPTS[activeStageMissionId] || 'default';
+  const opener = UK_STAGE_MISSION_OPENERS[activeStageMissionId] || '';
+
+  banner.innerHTML = '';
+  const row = document.createElement('div');
+  row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap';
+
+  const left = document.createElement('div');
+  left.style.cssText = 'flex:1;min-width:200px';
+
+  const titleRow = document.createElement('div');
+  titleRow.style.cssText = 'font-weight:700;font-size:13px;color:#312e81;display:flex;align-items:center;gap:6px;flex-wrap:wrap';
+  const titleSpan = document.createElement('span');
+  titleSpan.textContent = '🎯 實戰挑戰中：' + missionTitle;
+  const xpBadge = document.createElement('span');
+  xpBadge.style.cssText = 'background:#e0e7ff;color:#4338ca;font-size:11px;padding:1px 6px;border-radius:999px;font-weight:600';
+  xpBadge.textContent = '+' + missionXp + ' XP';
+  titleRow.appendChild(titleSpan);
+  titleRow.appendChild(xpBadge);
+
+  const subRow = document.createElement('div');
+  subRow.style.cssText = 'font-size:12px;color:#475569;margin-top:3px';
+  subRow.textContent = '跟讀下方開場白達 75+ 分即可通關，或點擊右側與 AI 展開實戰交涉';
+
+  left.appendChild(titleRow);
+  left.appendChild(subRow);
+
+  const actions = document.createElement('div');
+  actions.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap';
+
+  const roleplayBtn = document.createElement('button');
+  roleplayBtn.type = 'button';
+  roleplayBtn.className = 'btn-sm primary';
+  roleplayBtn.textContent = '💬 載入劇本並與 AI 對練';
+  roleplayBtn.onclick = () => {
+    if (typeof window !== 'undefined' && typeof window.activateMissionRoleplay === 'function') {
+      Promise.resolve(window.activateMissionRoleplay(tplId, opener, true)).catch(() => {});
+    }
+  };
+
+  const endBtn = document.createElement('button');
+  endBtn.type = 'button';
+  endBtn.className = 'btn-sm';
+  endBtn.textContent = '✕ 結束挑戰';
+  endBtn.onclick = () => {
+    activeStageMissionId = null;
+    if (typeof window !== 'undefined') window.activeStageMissionId = null;
+    renderActiveMissionBanner();
+  };
+
+  actions.appendChild(roleplayBtn);
+  actions.appendChild(endBtn);
+
+  row.appendChild(left);
+  row.appendChild(actions);
+  banner.appendChild(row);
+  banner.classList.remove('hidden');
+}
+if (typeof window !== 'undefined') window.renderActiveMissionBanner = renderActiveMissionBanner;
+
 function launchStageMission(missionId) {
-  activeStageMissionId = missionId;
-  if (typeof window !== 'undefined') window.activeStageMissionId = missionId;
   const opener = UK_STAGE_MISSION_OPENERS[missionId];
   if (!opener) return;
+  activeStageMissionId = missionId;
+  if (typeof window !== 'undefined') window.activeStageMissionId = missionId;
+  const tplId = UK_STAGE_MISSION_PROMPTS[missionId] || 'default';
   switchTab('practice');
+  if (typeof renderActiveMissionBanner === 'function') renderActiveMissionBanner();
+  if (typeof window !== 'undefined' && typeof window.activateMissionRoleplay === 'function') {
+    Promise.resolve(window.activateMissionRoleplay(tplId, opener, false)).catch(() => {});
+  }
   if (typeof selectSentence === 'function') {
     selectSentence(opener, true);
   } else {
@@ -1680,6 +2193,7 @@ function completeStageMission(missionId) {
   }
   activeStageMissionId = null;
   if (typeof window !== 'undefined') window.activeStageMissionId = null;
+  if (typeof renderActiveMissionBanner === 'function') renderActiveMissionBanner();
 }
 if (typeof window !== 'undefined') window.completeStageMission = completeStageMission;
 
@@ -1726,9 +2240,10 @@ function renderStagesDashboard() {
   const questsWrap = document.getElementById('dailyQuestsList');
   if (questsWrap) {
     const q = state.quests || {};
+    const revDone = q.review ? 5 : Math.min(5, state.dailyReviewsDone || 0);
     questsWrap.innerHTML = `
       <div class="quest-item ${q.review ? 'done' : ''}">
-        <span>${q.review ? '✅' : '⭕'} 晨間重溫 5 個在地語塊 (+30 XP)</span>
+        <span>${q.review ? '✅' : '⭕'} 晨間重溫 5 個在地語塊 (${revDone}/5) (+30 XP)</span>
         <button class="btn-sm" id="questGoReview" type="button">去重溫</button>
       </div>
       <div class="quest-item ${q.reading ? 'done' : ''}">
@@ -1853,6 +2368,7 @@ function renderStagesDashboard() {
     });
   }
 
+  renderPersonalWeaknessRadar();
   renderDrillsAccordion();
 }
 
@@ -2065,6 +2581,7 @@ function initUkSuite() {
     const popover = document.getElementById('wordPopover');
     if (popover && !popover.classList.contains('hidden')) {
       if (!popover.contains(e.target) && !e.target.classList.contains('rd-word')) {
+        cancelPopoverPending();
         popover.classList.add('hidden');
       }
     }
@@ -2084,17 +2601,23 @@ function initUkSuite() {
   });
   loadStagesAndDrills().then(() => {
     renderStagesDashboard();
+    renderActiveMissionBanner();
   });
 }
 
 // Memory-leak-proof Audio player with strict URL release and concurrent lock
 let currentUkAudio = null;
 let currentUkAudioUrl = null;
+let currentUkAudioDone = null;
 let ukVoiceSeq = 0; // 單調遞增請求序號：丟棄先發後至的舊請求
 
 function stopCurrentUkAudio() {
+  ++ukVoiceSeq;
   if (currentUkAudio) {
     try {
+      currentUkAudio.onended = null;
+      currentUkAudio.onerror = null;
+      currentUkAudio.onpause = null;
       currentUkAudio.pause();
       currentUkAudio.src = '';
     } catch (e) {}
@@ -2104,17 +2627,24 @@ function stopCurrentUkAudio() {
     try { URL.revokeObjectURL(currentUkAudioUrl); } catch (e) {}
     currentUkAudioUrl = null;
   }
-  if ('speechSynthesis' in window) {
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window) {
     try { window.speechSynthesis.cancel(); } catch (e) {}
+  }
+  if (currentUkAudioDone) {
+    const done = currentUkAudioDone;
+    currentUkAudioDone = null;
+    done({ durationMs: 0, interrupted: true });
   }
 }
 
 async function playUkVoice(text, forceOffline) {
-  if (!text) return;
-  if (typeof window.isAudioRecordingActive === 'function' && window.isAudioRecordingActive()) return;
-  const mySeq = ++ukVoiceSeq;
+  if (!text) return { durationMs: 0, interrupted: false };
+  if (typeof window !== 'undefined' && typeof window.isAudioRecordingActive === 'function' && window.isAudioRecordingActive()) {
+    return { durationMs: 0, interrupted: true };
+  }
 
   stopCurrentUkAudio();
+  const mySeq = ++ukVoiceSeq;
 
   const s = (typeof getSettings === 'function') ? getSettings() : {};
   const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
@@ -2122,30 +2652,58 @@ async function playUkVoice(text, forceOffline) {
   if (cloudReady && typeof ttsCached === 'function') {
     try {
       const res = await ttsCached(text);
-      if (mySeq !== ukVoiceSeq) return; // 等待期間已有更新的播放請求
-      if (typeof window.isAudioRecordingActive === 'function' && window.isAudioRecordingActive()) return;
-      stopCurrentUkAudio();
+      if (mySeq !== ukVoiceSeq) return { durationMs: 0, interrupted: true };
+      if (typeof window !== 'undefined' && typeof window.isAudioRecordingActive === 'function' && window.isAudioRecordingActive()) {
+        return { durationMs: 0, interrupted: true };
+      }
+
       const url = URL.createObjectURL(res.blob);
       currentUkAudioUrl = url;
       const a = new Audio(url);
       currentUkAudio = a;
+      const startedAt = Date.now();
 
-      const cleanup = () => {
-        if (currentUkAudioUrl === url) {
-          try { URL.revokeObjectURL(url); } catch (e) {}
-          currentUkAudioUrl = null;
+      const playOutcome = await new Promise((resolve) => {
+        let settled = false;
+        const finish = (outcome) => {
+          if (settled) return;
+          settled = true;
+          if (currentUkAudioDone === finish) currentUkAudioDone = null;
+          if (currentUkAudioUrl === url) {
+            try { URL.revokeObjectURL(url); } catch (e) {}
+            currentUkAudioUrl = null;
+          }
+          if (currentUkAudio === a) currentUkAudio = null;
+          resolve(outcome);
+        };
+        currentUkAudioDone = finish;
+
+        a.onended = () => {
+          const dur = (Number.isFinite(a.duration) && a.duration > 0)
+            ? Math.round(a.duration * 1000)
+            : Math.max(0, Date.now() - startedAt);
+          finish({ durationMs: dur, interrupted: false });
+        };
+        a.onerror = () => {
+          finish({ durationMs: 0, interrupted: false, failed: true });
+        };
+
+        const p = a.play();
+        if (p && typeof p.catch === 'function') {
+          p.catch(() => {
+            finish({ durationMs: 0, interrupted: false, failed: true });
+          });
         }
-        if (currentUkAudio === a) currentUkAudio = null;
-      };
+      });
 
-      a.onended = cleanup;
-      a.onerror = cleanup;
-      a.onpause = () => { if (a.currentTime >= a.duration) cleanup(); };
-
-      await a.play();
-      return;
+      if (playOutcome && !playOutcome.failed) {
+        return { durationMs: playOutcome.durationMs, interrupted: !!playOutcome.interrupted };
+      }
+      if (mySeq !== ukVoiceSeq || (playOutcome && playOutcome.interrupted)) {
+        return { durationMs: 0, interrupted: true };
+      }
     } catch (e) {
-      if (mySeq !== ukVoiceSeq) return;
+      if (mySeq !== ukVoiceSeq) return { durationMs: 0, interrupted: true };
       if (currentUkAudioUrl) {
         try { URL.revokeObjectURL(currentUkAudioUrl); } catch (err) {}
         currentUkAudioUrl = null;
@@ -2154,14 +2712,54 @@ async function playUkVoice(text, forceOffline) {
     }
   }
 
-  if (typeof window.isAudioRecordingActive === 'function' && window.isAudioRecordingActive()) return;
-  if ('speechSynthesis' in window) {
-    window.speechSynthesis.cancel();
+  if (mySeq !== ukVoiceSeq) return { durationMs: 0, interrupted: true };
+  if (typeof window !== 'undefined' && typeof window.isAudioRecordingActive === 'function' && window.isAudioRecordingActive()) {
+    return { durationMs: 0, interrupted: true };
+  }
+  if (typeof window !== 'undefined' && 'speechSynthesis' in window && typeof SpeechSynthesisUtterance !== 'undefined') {
+    try { window.speechSynthesis.cancel(); } catch (e) {}
     const utt = new SpeechSynthesisUtterance(text);
     utt.lang = 'en-GB';
-    const voices = window.speechSynthesis.getVoices();
+    const voices = window.speechSynthesis.getVoices ? window.speechSynthesis.getVoices() : [];
     const gbVoice = voices.find(v => v.lang === 'en-GB' || v.lang === 'en_GB');
     if (gbVoice) utt.voice = gbVoice;
-    window.speechSynthesis.speak(utt);
+
+    const startedAt = Date.now();
+    const timeoutMs = Math.max(8000, text.length * 180);
+
+    return await new Promise((resolve) => {
+      let settled = false;
+      let safetyTimer = null;
+      const finish = (outcome) => {
+        if (settled) return;
+        settled = true;
+        if (safetyTimer) {
+          clearTimeout(safetyTimer);
+          safetyTimer = null;
+        }
+        if (currentUkAudioDone === finish) currentUkAudioDone = null;
+        resolve(outcome);
+      };
+      currentUkAudioDone = finish;
+
+      safetyTimer = setTimeout(() => {
+        finish({ durationMs: Math.max(0, Date.now() - startedAt), interrupted: false });
+      }, timeoutMs);
+
+      utt.onend = () => {
+        finish({ durationMs: Math.max(0, Date.now() - startedAt), interrupted: false });
+      };
+      utt.onerror = (ev) => {
+        const wasCanceled = !!(ev && (ev.error === 'canceled' || ev.error === 'interrupted'));
+        finish({ durationMs: Math.max(0, Date.now() - startedAt), interrupted: wasCanceled });
+      };
+
+      try {
+        window.speechSynthesis.speak(utt);
+      } catch (e) {
+        finish({ durationMs: 0, interrupted: false });
+      }
+    });
   }
+  return { durationMs: 0, interrupted: false };
 }
