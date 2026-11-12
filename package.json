@@ -1,12 +1,12 @@
 {
   "name": "sprechmate-uk",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "SprechMate (UK Edition) - British English Survival & Reading Fluency PWA with AI Spaced Repetition and Articulatory Anatomy Diagrams",
   "main": "index.html",
   "scripts": {
     "start": "powershell -ExecutionPolicy Bypass -File ./start-uk.ps1",
     "serve": "npx serve -p 8000 -l 127.0.0.1 .",
-    "test:syntax": "node -e \"const fs = require('fs'); const { execSync } = require('child_process'); ['uk_engine.js', 'sw.js', 'quotes.js'].forEach(f => { execSync('node -c ' + f); console.log('✓ JS: ' + f); }); ['uk_stages.json', 'uk_drills.json', 'uk_reading_presets.json', 'manifest.json'].forEach(f => { JSON.parse(fs.readFileSync(f, 'utf8')); console.log('✓ JSON: ' + f); }); const html = fs.readFileSync('index.html', 'utf8'); const m = html.match(/<script>([\\s\\S]*?)<\\/script>/); new Function(m[1]); console.log('✓ HTML inline script OK'); console.log('ALL SYNTAX CHECKS PASSED.');\"",
+    "test:syntax": "node tests/check-syntax.js",
     "test:unit": "node --test \"tests/**/*.test.js\"",
     "test": "npm run test:syntax && npm run test:unit",
     "deploy": "cf deploy"

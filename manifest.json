@@ -38,7 +38,7 @@
       "name": "今日打卡",
       "short_name": "打卡",
       "description": "生成今日練習打卡圖並分享",
-      "url": "/?checkin=1",
+      "url": "./?checkin=1",
       "icons": [
         {
           "src": "icon-192.png",

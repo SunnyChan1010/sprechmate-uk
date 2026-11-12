@@ -835,7 +835,7 @@ function renderActiveReviewCard(item) {
 
   container.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-      <span class="badge" style="background:#8b5cf6">Stage ${item.stage || 1} · ${esc(item.type || '語塊')}</span>
+      <span class="badge" style="background:#8b5cf6">Stage ${Number(item.stage) || 1} · ${esc(item.type || '語塊')}</span>
       <span class="mut" style="font-size:12px">${esc(item.context || '')}</span>
     </div>
     <div class="flashcard-box" id="flashcardBox">
@@ -1175,12 +1175,39 @@ function exportReviewsJson() {
   setTimeout(() => { try { URL.revokeObjectURL(url); } catch (e) {} }, 1000);
 }
 
+function clampFinite(val, min, max, fallback) {
+  if (val === null || val === undefined || val === '' || typeof val === 'boolean' || typeof val === 'object') {
+    return fallback;
+  }
+  if (typeof val === 'string' && !val.trim()) return fallback;
+  const n = Number(val);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+if (typeof window !== 'undefined') window.clampFinite = clampFinite;
+
 function importReviewsJson(file) {
   if (!file) return;
   if (file.size > 10 * 1024 * 1024) {
     alertDlg('檔案過大（超過 10MB），請確認是否為正確的進度備份檔案');
     return;
   }
+  const clamp = (typeof clampFinite === 'function')
+    ? clampFinite
+    : function(val, min, max, fb) {
+        if (val === null || val === undefined || val === '' || typeof val === 'boolean' || typeof val === 'object') return fb;
+        if (typeof val === 'string' && !val.trim()) return fb;
+        const n = Number(val);
+        if (!Number.isFinite(n)) return fb;
+        return Math.min(max, Math.max(min, n));
+      };
+  const getToday = (typeof localDayStr === 'function')
+    ? localDayStr
+    : function() {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      };
+
   const reader = new FileReader();
   reader.onload = async (e) => {
     try {
@@ -1188,7 +1215,10 @@ function importReviewsJson(file) {
         (k === '__proto__' || k === 'constructor' || k === 'prototype') ? undefined : v
       );
       const hasReviews = Array.isArray(data && data.reviews);
-      const hasProg = !!(data && data.progression && typeof data.progression === 'object');
+      const rawProgObj = (data && data.progression && typeof data.progression === 'object' && !Array.isArray(data.progression))
+        ? data.progression
+        : ((data && data.stats && typeof data.stats === 'object' && !Array.isArray(data.stats)) ? data.stats : null);
+      const hasProg = !!rawProgObj;
       if (!hasReviews && !hasProg) {
         alertDlg('匯入失敗：此檔案不包含有效的語塊或進度備份資料');
         return;
@@ -1198,35 +1228,88 @@ function importReviewsJson(file) {
         if (!ok) return;
       }
       if (hasReviews) {
-        reviewsCache = data.reviews.map(r => ({
-          id: String(r.id || ('rev_' + Math.random().toString(36).substr(2, 6))),
-          text: String(r.text || '').slice(0, 1000),
-          translation: String(r.translation || '').slice(0, 1000),
-          context: String(r.context || '').slice(0, 200),
-          type: ['sentence', 'collocation', 'drill'].includes(r.type) ? r.type : 'sentence',
-          stage: Number(r.stage) || 1,
-          createdAt: Number(r.createdAt) || Date.now(),
-          dueDate: Number(r.dueDate) || Date.now(),
-          interval: Number(r.interval) || 0,
-          reps: Number(r.reps) || 0,
-          easeFactor: Math.min(3.5, Math.max(1.3, Number(r.easeFactor) || 2.5)),
-          lapses: Number(r.lapses) || 0,
-          lastScore: r.lastScore ? Number(r.lastScore) : null,
-          history: Array.isArray(r.history) ? r.history.slice(-50) : []
-        })).filter(r => r.text.length > 0);
+        const now = Date.now();
+        const seenIds = new Set();
+        const sanitizedReviews = [];
+        for (let i = 0; i < data.reviews.length; i++) {
+          const r = data.reviews[i];
+          if (!r || typeof r !== 'object') continue;
+          const text = String(r.text || '').slice(0, 1000);
+          if (!text.trim()) continue;
+          const rawId = (r.id != null ? String(r.id).trim() : '').slice(0, 200);
+          const id = rawId || ('rev_' + now + '_' + i + '_' + Math.random().toString(36).slice(2, 7));
+          if (seenIds.has(id)) continue;
+          seenIds.add(id);
+
+          const rawReps = r.reps !== undefined ? r.reps : r.rep;
+          const rawEf = r.easeFactor !== undefined ? r.easeFactor : r.ef;
+          const rawDue = r.dueDate !== undefined ? r.dueDate : r.nextReview;
+          const rawScore = clamp(r.lastScore, 0, 100, null);
+
+          sanitizedReviews.push({
+            id,
+            text,
+            translation: String(r.translation || '').slice(0, 1000),
+            context: String(r.context || '').slice(0, 200),
+            type: ['sentence', 'collocation', 'drill'].includes(r.type) ? r.type : 'sentence',
+            stage: Math.floor(clamp(r.stage, 1, 4, 1)),
+            createdAt: Math.floor(clamp(r.createdAt, 0, 8640000000000000, now)),
+            dueDate: Math.floor(clamp(rawDue, 0, 8640000000000000, now)),
+            interval: Math.floor(clamp(r.interval, 0, 3650, 0)),
+            reps: Math.floor(clamp(rawReps, 0, 1000, 0)),
+            easeFactor: Math.round(clamp(rawEf, 1.3, 3.5, 2.5) * 100) / 100,
+            lapses: Math.floor(clamp(r.lapses, 0, 1000, 0)),
+            lastScore: rawScore === null ? null : Math.round(rawScore),
+            history: Array.isArray(r.history)
+              ? r.history.slice(-50).filter(h => h && typeof h === 'object').map(h => {
+                  const hs = clamp(h.s, 0, 100, null);
+                  return {
+                    t: Math.floor(clamp(h.t, 0, 8640000000000000, now)),
+                    r: Math.floor(clamp(h.r, 1, 4, 3)),
+                    s: hs === null ? null : Math.round(hs)
+                  };
+                })
+              : []
+          });
+        }
+        reviewsCache = sanitizedReviews;
         persistReviewsCache(true);
       }
       if (hasProg) {
-        const p = data.progression;
+        const p = rawProgObj;
+        const today = getToday();
+        const dateCandidate = typeof p.dailyDate === 'string'
+          ? p.dailyDate.trim()
+          : (typeof p.lastStudyDay === 'string' ? p.lastStudyDay.trim() : '');
+        const validDate = (/^\d{4}-\d{2}-\d{2}$/.test(dateCandidate) && !isNaN(Date.parse(dateCandidate + 'T00:00:00Z')))
+          ? dateCandidate
+          : today;
+        const rawQuests = (p.quests && typeof p.quests === 'object' && !Array.isArray(p.quests)) ? p.quests : {};
+        const questsFresh = (typeof p.questsDate === 'string') ? (p.questsDate.trim() === today) : true;
+        const rawMissions = Array.isArray(p.completedMissions) ? p.completedMissions : [];
+        const uniqMissions = Array.from(new Set(
+          rawMissions
+            .map(id => (typeof id === 'string' ? id.trim() : ''))
+            .filter(id => /^m([1-9]|1[0-5])$/.test(id))
+        ));
+        const xpVal = Math.floor(clamp(p.xp, 0, 10000000, 0));
+        const derivedLevel = xpVal >= 2500 ? 4 : xpVal >= 1000 ? 3 : xpVal >= 300 ? 2 : 1;
+        const rawStreak = p.streakDays !== undefined ? p.streakDays : p.streak;
         const sanitizedProg = {
-          xp: Math.max(0, Number(p.xp) || 0),
-          level: Math.min(4, Math.max(1, Number(p.level) || 1)),
-          streakDays: Math.max(1, Number(p.streakDays) || 1),
-          dailyDate: String(p.dailyDate || new Date().toISOString().slice(0, 10)),
-          dailyReviewsDone: Math.max(0, Number(p.dailyReviewsDone) || 0),
-          readingsCount: Math.max(0, Number(p.readingsCount) || 0),
-          quests: p.quests || { review: false, reading: false, chat: false },
-          completedMissions: Array.isArray(p.completedMissions) ? p.completedMissions : []
+          xp: xpVal,
+          level: Math.floor(clamp(p.level, 1, 4, derivedLevel)),
+          streakDays: Math.floor(clamp(rawStreak, 0, 36500, 1)),
+          dailyDate: validDate,
+          dailyReviewsDone: questsFresh ? Math.floor(clamp(p.dailyReviewsDone, 0, 10000, 0)) : 0,
+          readingsCount: Math.floor(clamp(p.readingsCount, 0, 100000, 0)),
+          quests: questsFresh
+            ? {
+                review: !!rawQuests.review,
+                reading: !!rawQuests.reading,
+                chat: !!(rawQuests.chat !== undefined ? rawQuests.chat : rawQuests.practice)
+              }
+            : { review: false, reading: false, chat: false },
+          completedMissions: uniqMissions
         };
         localStorage.setItem(LS_PROGRESSION, JSON.stringify(sanitizedProg));
       }
@@ -1242,6 +1325,8 @@ function importReviewsJson(file) {
 
 /* ================= 英國在地化：長文沉浸精讀工作室與內建英式詞庫 (Reading Studio & UK Glossary) ================= */
 
+const READING_PAGE_SIZE = 80;
+let readingRenderLimit = READING_PAGE_SIZE;
 let currentReadingSentences = [];
 let ukReadingPresets = [];
 
@@ -1479,6 +1564,9 @@ function initReadingStudio() {
       stopShadowRadio();
       dismissWordPopover();
       currentReadingSentences = [];
+      readingRenderLimit = READING_PAGE_SIZE;
+      const listEl = document.getElementById('readingSentencesList');
+      if (listEl) listEl.innerHTML = '';
       document.getElementById('readingInput').value = '';
       document.getElementById('readingStudioCard').classList.add('hidden');
     };
@@ -1503,15 +1591,76 @@ function initReadingStudio() {
   const shadowRadioBtn = document.getElementById('shadowRadioBtn');
   if (shadowRadioBtn) shadowRadioBtn.onclick = toggleShadowRadio;
 
-  // 事件委派：整個精讀列表只掛一個監聽器處理查詞
+  // 事件委派：整個精讀列表只掛一個監聽器處理語塊操作按鈕與查詞
   const sentList = document.getElementById('readingSentencesList');
   if (sentList) {
     sentList.addEventListener('click', (e) => {
-      const wordEl = e.target.closest && e.target.closest('.rd-word');
+      const target = e.target;
+      if (!target || typeof target.closest !== 'function') return;
+
+      const actBtn = target.closest('button[data-rd-act]');
+      if (actBtn && sentList.contains(actBtn)) {
+        const act = actBtn.getAttribute('data-rd-act') || (actBtn.dataset && actBtn.dataset.rdAct) || '';
+        if (act === 'more') {
+          const pageSize = (typeof READING_PAGE_SIZE === 'number' && READING_PAGE_SIZE > 0) ? READING_PAGE_SIZE : 80;
+          readingRenderLimit = Math.min(currentReadingSentences.length, readingRenderLimit + pageSize);
+          renderReadingStudio(currentReadingSentences);
+          return;
+        }
+        const itemEl = actBtn.closest('.reading-sentence-item');
+        const rawIdx = itemEl
+          ? ((itemEl.dataset && itemEl.dataset.idx != null) ? itemEl.dataset.idx : String(itemEl.id || '').replace('rd-item-', ''))
+          : '';
+        const idx = parseInt(rawIdx, 10);
+        if (isNaN(idx) || !currentReadingSentences[idx]) return;
+        const sent = currentReadingSentences[idx];
+
+        if (act === 'play') {
+          rewardReadingEngagement();
+          document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
+          if (itemEl) itemEl.classList.add('playing');
+          playUkVoice(sent);
+        } else if (act === 'shadow') {
+          rewardReadingEngagement();
+          switchTab('practice');
+          if (typeof selectSentence === 'function') {
+            selectSentence(sent, true);
+          } else {
+            const stBox = document.getElementById('sentenceText');
+            if (stBox) stBox.value = sent;
+            if (typeof autoGrowTextarea === 'function' && stBox) autoGrowTextarea(stBox);
+            if (typeof genRefAudio === 'function') genRefAudio(sent, true).catch(() => {});
+          }
+        } else if (act === 'add') {
+          if (actBtn.disabled) return;
+          actBtn.disabled = true;
+          Promise.resolve(addReviewItem({
+            text: sent,
+            translation: extractSentenceNotes(sent),
+            context: '長文精讀 Chunk ' + (idx + 1),
+            type: 'sentence',
+            stage: 3
+          })).then(() => {
+            actBtn.textContent = '✓ 已收錄';
+            setTimeout(() => {
+              actBtn.textContent = '⭐ 加至重溫';
+              actBtn.disabled = false;
+            }, 1500);
+          }).catch(() => {
+            actBtn.disabled = false;
+          });
+        }
+        return;
+      }
+
+      const wordEl = target.closest('.rd-word');
       if (!wordEl || !sentList.contains(wordEl)) return;
       e.stopPropagation();
       const itemEl = wordEl.closest('.reading-sentence-item');
-      const idx = itemEl ? parseInt(String(itemEl.id).replace('rd-item-', ''), 10) : NaN;
+      const rawIdx = itemEl
+        ? ((itemEl.dataset && itemEl.dataset.idx != null) ? itemEl.dataset.idx : String(itemEl.id || '').replace('rd-item-', ''))
+        : '';
+      const idx = parseInt(rawIdx, 10);
       const sent = !isNaN(idx) ? (currentReadingSentences[idx] || '') : '';
       showWordPopover(wordEl.textContent.trim(), e, sent);
     });
@@ -1631,6 +1780,13 @@ async function toggleShadowRadio() {
   for (let i = 0; i < currentReadingSentences.length; i++) {
     if (!isShadowRadioActive || myRunSeq !== shadowRadioSeq) break;
     const sent = currentReadingSentences[i];
+    if (typeof readingRenderLimit === 'number' && i >= readingRenderLimit) {
+      const pageSize = (typeof READING_PAGE_SIZE === 'number' && READING_PAGE_SIZE > 0) ? READING_PAGE_SIZE : 80;
+      readingRenderLimit = Math.min(currentReadingSentences.length, i + pageSize);
+      if (typeof renderReadingStudio === 'function') {
+        renderReadingStudio(currentReadingSentences);
+      }
+    }
     if (typeof document !== 'undefined') {
       const item = document.getElementById('rd-item-' + i);
       document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
@@ -1696,6 +1852,7 @@ function analyzeReadingText(rawText) {
   document.getElementById('readingSentenceCount').textContent = `${currentReadingSentences.length} 個語塊`;
 
   readingQuestRewarded = false;
+  readingRenderLimit = READING_PAGE_SIZE;
   renderReadingStudio(currentReadingSentences);
   document.getElementById('readingStudioCard').classList.remove('hidden');
 }
@@ -1705,12 +1862,26 @@ function renderReadingStudio(sentences) {
   if (!container) return;
   container.innerHTML = '';
 
-  sentences.forEach((sent, idx) => {
+  const list = Array.isArray(sentences) ? sentences : [];
+  const pageSize = (typeof READING_PAGE_SIZE === 'number' && READING_PAGE_SIZE > 0) ? READING_PAGE_SIZE : 80;
+  const limit = (typeof readingRenderLimit === 'number' && readingRenderLimit > 0) ? readingRenderLimit : pageSize;
+  const escFn = (typeof esc === 'function')
+    ? esc
+    : (s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch])));
+  const loadTitle = escFn(typeof t === 'function' ? t('sent.loadPractice') : '載入句子練習');
+  const useConn = (typeof connSpeechEnabled !== 'undefined') ? connSpeechEnabled : false;
+
+  const frag = document.createDocumentFragment();
+  const slice = list.slice(0, limit);
+
+  slice.forEach((sent, idx) => {
     const item = document.createElement('div');
     item.className = 'reading-sentence-item';
     item.id = 'rd-item-' + idx;
+    if (item.dataset) item.dataset.idx = String(idx);
+    if (item.setAttribute) item.setAttribute('data-idx', String(idx));
 
-    const wrappedHtml = annotateConnectedSpeech(sent, connSpeechEnabled);
+    const wrappedHtml = annotateConnectedSpeech(sent, useConn);
 
     item.innerHTML = `
       <div style="display:flex;justify-content:space-between;margin-bottom:4px">
@@ -1718,46 +1889,30 @@ function renderReadingStudio(sentences) {
       </div>
       <div class="sentence-text-wrap" id="rd-text-${idx}">${wrappedHtml}</div>
       <div class="sentence-actions">
-        <button class="btn-sm" id="rd-play-${idx}" type="button">🔊 朗讀</button>
-        <button class="btn-sm" id="rd-shadow-${idx}" type="button" title="${(typeof t === 'function' ? t('sent.loadPractice') : '載入句子練習')}">🎙️ 跟讀特訓</button>
-        <button class="btn-sm" id="rd-add-${idx}" type="button">⭐ 加至重溫</button>
+        <button class="btn-sm" data-rd-act="play" type="button">🔊 朗讀</button>
+        <button class="btn-sm" data-rd-act="shadow" type="button" title="${loadTitle}">🎙️ 跟讀特訓</button>
+        <button class="btn-sm" data-rd-act="add" type="button">⭐ 加至重溫</button>
       </div>
     `;
 
-    item.querySelector('#rd-play-' + idx).onclick = () => {
-      rewardReadingEngagement();
-      document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
-      item.classList.add('playing');
-      playUkVoice(sent);
-    };
-
-    item.querySelector('#rd-shadow-' + idx).onclick = () => {
-      rewardReadingEngagement();
-      switchTab('practice');
-      if (typeof selectSentence === 'function') {
-        selectSentence(sent, true);
-      } else {
-        const stBox = document.getElementById('sentenceText');
-        if (stBox) stBox.value = sent;
-        if (typeof autoGrowTextarea === 'function' && stBox) autoGrowTextarea(stBox);
-        if (typeof genRefAudio === 'function') genRefAudio(sent, true).catch(() => {});
-      }
-    };
-
-    item.querySelector('#rd-add-' + idx).onclick = async (e) => {
-      await addReviewItem({
-        text: sent,
-        translation: extractSentenceNotes(sent),
-        context: '長文精讀 Chunk ' + (idx + 1),
-        type: 'sentence',
-        stage: 3
-      });
-      e.target.textContent = '✅ 已收錄';
-      e.target.disabled = true;
-    };
-
-    container.appendChild(item);
+    frag.appendChild(item);
   });
+
+  if (list.length > limit) {
+    const moreWrap = document.createElement('div');
+    moreWrap.style.cssText = 'text-align:center;padding:10px 0 4px';
+    const moreBtn = document.createElement('button');
+    moreBtn.className = 'ghost-btn';
+    moreBtn.type = 'button';
+    if (moreBtn.dataset) moreBtn.dataset.rdAct = 'more';
+    if (moreBtn.setAttribute) moreBtn.setAttribute('data-rd-act', 'more');
+    moreBtn.style.cssText = 'font-size:13px;padding:6px 16px';
+    moreBtn.textContent = `⬇️ 載入更多語塊（剩餘 ${list.length - limit} 句）`;
+    moreWrap.appendChild(moreBtn);
+    frag.appendChild(moreWrap);
+  }
+
+  container.appendChild(frag);
 }
 
 const aiWordExplainCache = new Map();
@@ -2365,7 +2520,7 @@ function renderStagesDashboard() {
       stgBlock.style.cssText = 'margin-bottom:12px';
       const stgHeader = document.createElement('div');
       stgHeader.style.cssText = 'font-size:12px;font-weight:bold;color:#475569;margin-bottom:6px;display:flex;align-items:center;gap:6px';
-      stgHeader.innerHTML = `${stg.badge} <b>Stage ${stg.level}: ${esc(stg.name)}</b>`;
+      stgHeader.innerHTML = `${esc(stg.badge || '')} <b>Stage ${Number(stg.level) || 1}: ${esc(stg.name)}</b>`;
       stgBlock.appendChild(stgHeader);
 
       (stg.missions || []).forEach(m => {
@@ -2380,7 +2535,7 @@ function renderStagesDashboard() {
             </div>
             <div style="font-size:11px;color:#64748b;margin-left:22px">
               <span class="badge" style="background:#e0e7ff;color:#3730a3;font-size:10px;padding:1px 5px">${esc(m.category)}</span>
-              <span style="margin-left:4px">+${m.xp} XP</span>
+              <span style="margin-left:4px">+${Number(m.xp) || 0} XP</span>
             </div>
           </div>
           <button class="btn-sm" type="button" style="flex:none">${isDone ? '再次演練' : '🎯 挑戰'}</button>
@@ -2439,7 +2594,10 @@ function renderDrillsAccordion() {
       shadowBtn.className = 'btn-sm';
       shadowBtn.textContent = '🎙️';
       shadowBtn.type = 'button';
-      const loadTxt = (typeof t === 'function' ? t('sent.loadPractice') : ((typeof getSettings === 'function' && getSettings().uiLang === 'en') ? 'Load into Practice' : '載入句子練習'));
+      const uiLang = (typeof peekSettings === 'function')
+        ? peekSettings().uiLang
+        : ((typeof getSettings === 'function') ? getSettings().uiLang : 'zh');
+      const loadTxt = (typeof t === 'function' ? t('sent.loadPractice') : (uiLang === 'en' ? 'Load into Practice' : '載入句子練習'));
       shadowBtn.title = loadTxt;
       shadowBtn.setAttribute('aria-label', loadTxt);
       shadowBtn.onclick = () => drillShadowSentence(ex.text);
@@ -2484,7 +2642,12 @@ function switchTab(tabId) {
     clearTimeout(reviewAutoTimer);
     reviewAutoTimer = null;
   }
-  if (tabId !== 'practice') pendingReviewAssessmentId = null;
+  if (tabId !== 'practice') {
+    pendingReviewAssessmentId = null;
+    if (typeof window !== 'undefined' && typeof window.abortActiveRecording === 'function') {
+      window.abortActiveRecording();
+    }
+  }
 
   document.querySelectorAll('#appTabs .tab-btn').forEach(btn => {
     btn.classList.toggle('active', btn.dataset.tab === tabId);
@@ -2553,7 +2716,14 @@ function initUkSuite() {
     });
   }
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && phModal && !phModal.classList.contains('hidden')) {
+    if (
+      e.key === 'Escape'
+      && phModal
+      && !phModal.classList.contains('hidden')
+      && (typeof window === 'undefined' || !window.isTopOverlay || window.isTopOverlay(phModal))
+    ) {
+      if (typeof e.preventDefault === 'function') e.preventDefault();
+      if (typeof e.stopImmediatePropagation === 'function') e.stopImmediatePropagation();
       closePhoneticModal();
     }
   });
@@ -2674,7 +2844,9 @@ async function playUkVoice(text, forceOffline) {
   stopCurrentUkAudio();
   const mySeq = ++ukVoiceSeq;
 
-  const s = (typeof getSettings === 'function') ? getSettings() : {};
+  const s = (typeof peekSettings === 'function')
+    ? peekSettings()
+    : ((typeof getSettings === 'function') ? getSettings() : {});
   const isOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
   const cloudReady = !forceOffline && !isOffline && ((typeof canUseCloudTts === 'function') ? canUseCloudTts(s) : !!(s.azureKey && s.azureRegion));
   if (cloudReady && typeof ttsCached === 'function') {
