@@ -806,7 +806,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
         <button id="resetSettingsBtn" type="button" class="danger" data-i18n="set.resetSet">還原預設設定</button>
       </div>
     </div>
-    <div class="ver"><span data-i18n="set.version">版本</span> v1.6.1 · <a class="ver-link" href="https://github.com/SunnyChan1010/sprechmate-uk" target="_blank" rel="noopener noreferrer">GitHub</a></div>
+    <div class="ver"><span data-i18n="set.version">版本</span> v1.6.2 · <a class="ver-link" href="https://github.com/SunnyChan1010/sprechmate-uk" target="_blank" rel="noopener noreferrer">GitHub</a></div>
   </section>
 
   <!-- ================= 視覺化口型與舌位圖解彈窗 ================= -->
@@ -849,6 +849,7 @@ mark{background:#fff3b0;border-radius:2px;padding:0 1px}
 </main>
 <script>
 'use strict';
+/* SprechMate UK 核心腳本（承接 v1.6.1 安全加固基線，升級至 v1.6.2 效能優化架構） */
 /* 按需加载本地脚本：手机浏览器首屏只下 index.html，用到打卡/二维码时才下对应库（PWA 安装时 SW 仍会全部预缓存） */
 function loadScript(src) {
   loadScript.cache = loadScript.cache || {};
@@ -2091,31 +2092,38 @@ function collectSettings() {
   applyHistoryLimits(); // 条数变化立即对现有数据生效
   refreshStorageStats(); // 上限变化可能裁剪了数据，统计数字同步刷新
 }
-/* 设置里的保留条数变化后，立即裁剪现有数据（超出的聊天/练习记录删掉，录音同步清） */
+/* 設定裏的保留條數變化後，立即裁剪現有資料（超出的聊天／練習記錄刪除，錄音單一事務批次清除） */
 function applyHistoryLimits() {
   const s = getSettings();
   let convs = getConvs();
   let changed = false;
+  let recordsMutated = false;
+  const staleAudioKeys = [];
   convs.forEach(c => {
-    const keepChat = s.chatHistoryLimit + 1; // N 条发给 API（含当前问题）+ AI 回复占位
+    const keepChat = s.chatHistoryLimit + 1; // N 條發給 API（含當前問題）+ AI 回覆佔位
     if ((c.messages || []).length > keepChat) {
       c.messages = c.messages.slice(-keepChat);
       changed = true;
     }
     if ((c.records || []).length > s.practiceHistoryLimit) {
       c.records.slice(s.practiceHistoryLimit).forEach(r => {
-        idbDel('my:' + r.id).catch(function(){});
-        idbDel('ref:' + r.id).catch(function(){});
+        if (r && r.id) staleAudioKeys.push('my:' + r.id, 'ref:' + r.id);
       });
       c.records = c.records.slice(0, s.practiceHistoryLimit);
+      recordsMutated = true;
       changed = true;
     }
   });
+  if (staleAudioKeys.length) idbDelBatch(staleAudioKeys);
   const before = convs.length;
   convs = trimConvsToLimit(convs, s.convLimit);
-  if (convs.length !== before) changed = true;
+  if (convs.length !== before) {
+    recordsMutated = true;
+    changed = true;
+  }
+  if (recordsMutated && typeof _practiceRecordsRev !== 'undefined') _practiceRecordsRev++;
   if (changed) {
-    // 当前看的对话要是被裁掉了，切到剩下的第一个；全没了就新建一个
+    // 當前檢視的對話若被裁掉，切換至剩餘第一個；全空則新建一個
     if (!convs.some(c => c.id === getActiveId())) {
       setActiveId(convs.length ? convs[0].id : '');
       if (!convs.length) { saveConvs(convs); newConversation(); return; }
@@ -2301,6 +2309,11 @@ let convsSaveWarned = false;
 let convsDirty = false;
 let convsSaveTimer = 0;
 let convsPendingResolvers = [];
+let _practiceRecordsRev = 0;
+function getPracticeRecordsRev() { return _practiceRecordsRev; }
+if (typeof window !== 'undefined') {
+  window.getPracticeRecordsRev = function () { return _practiceRecordsRev; };
+}
 
 async function initConvsStore() {
   let raw = null;
@@ -2308,23 +2321,26 @@ async function initConvsStore() {
   if (typeof raw === 'string' && raw) {
     try { convsCache = JSON.parse(raw); } catch (e) { convsCache = []; }
     if (!Array.isArray(convsCache)) convsCache = [];
-    try { localStorage.removeItem(LS_CONVS); } catch (e) {} // 老地方已无用，清掉
+    try { localStorage.removeItem(LS_CONVS); } catch (e) {} // 舊儲存鍵已無用，清除
     convsLoaded = true;
+    if (typeof _practiceRecordsRev !== 'undefined') _practiceRecordsRev++;
     return;
   }
-  // IndexedDB 里没有：从 localStorage 迁移老数据
+  // IndexedDB 尚無資料：由 localStorage 遷移舊版資料
   try { convsCache = JSON.parse(localStorage.getItem(LS_CONVS) || '[]'); }
   catch (e) { convsCache = []; }
   if (!Array.isArray(convsCache)) convsCache = [];
   convsLoaded = true;
+  if (typeof _practiceRecordsRev !== 'undefined') _practiceRecordsRev++;
   if (convsCache.length) {
     try {
       await idbSet(IDB_CONVS_KEY, JSON.stringify(convsCache));
-      localStorage.removeItem(LS_CONVS); // 迁移成功，清掉旧地方
-    } catch (e) { /* 迁移失败就留着，下次启动再试 */ }
+      localStorage.removeItem(LS_CONVS); // 遷移成功，清除舊鍵
+    } catch (e) { /* 遷移失敗則保留，下次啟動重試 */ }
   }
 }
 function getConvs() { return convsCache || []; }
+if (typeof window !== 'undefined') window.getConvs = getConvs;
 function flushConvsNow() {
   if (typeof clearTimeout === 'function' && convsSaveTimer) {
     clearTimeout(convsSaveTimer);
@@ -2365,6 +2381,7 @@ function flushConvsNow() {
 if (typeof window !== 'undefined') window.flushConvsNow = flushConvsNow;
 
 function saveConvs(c, immediate) {
+  if (c !== convsCache && typeof _practiceRecordsRev !== 'undefined') _practiceRecordsRev++;
   convsCache = c;
   if (!convsLoaded) return Promise.resolve(); // 尚未完成 IndexedDB 初始載入：嚴禁覆寫磁碟資料
   if (typeof convsDirty !== 'undefined') convsDirty = true;
@@ -2450,16 +2467,18 @@ function newConversation() {
   setActiveId(c.id);
   renderConvList(); renderChat(); renderHistory(); resetPracticeUI();
 }
-/* 对话个数裁剪：只留最近 N 个，最老的连练习录音一起删 */
+/* 對話數量裁剪：只留最近 N 個，最舊的連同練習錄音一併刪除 */
 function trimConvsToLimit(convs, limit) {
   if (convs.length <= limit) return convs;
   const sorted = [...convs].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   sorted.slice(limit).forEach(deleteConvAudios);
+  if (typeof _practiceRecordsRev !== 'undefined') _practiceRecordsRev++;
   return sorted.slice(0, limit);
 }
 function deleteConv(id) {
   const doomed = getConvs().find(x => x.id === id);
   if (doomed) deleteConvAudios(doomed);
+  if (typeof _practiceRecordsRev !== 'undefined') _practiceRecordsRev++;
   let convs = getConvs().filter(x => x.id !== id);
   saveConvs(convs);
   if (getActiveId() === id) setActiveId(convs.length ? convs[0].id : '');
@@ -2637,7 +2656,11 @@ function renderConvList() {
   const convs = getConvs();
   const aid = getActiveId();
   list.innerHTML = '';
-  if (!convs.length) list.innerHTML = '<div class="hint">' + t('drawer.empty') + '</div>';
+  if (!convs.length) {
+    list.innerHTML = '<div class="hint">' + t('drawer.empty') + '</div>';
+    return;
+  }
+  const frag = document.createDocumentFragment();
   convs.forEach(c => {
     const b = document.createElement('button');
     b.className = 'conv' + (c.id === aid ? ' active' : '');
@@ -2655,8 +2678,9 @@ function renderConvList() {
     exp.onclick = e => { e.stopPropagation(); exportConv(c.id); };
     b.appendChild(exp); b.appendChild(tt); b.appendChild(x);
     b.onclick = () => { setActiveId(c.id); renderConvList(); renderChat(); renderHistory(); resetPracticeUI(); closeDrawer(); };
-    list.appendChild(b);
+    frag.appendChild(b);
   });
+  list.appendChild(frag);
 }
 
 /* ================= 对话搜索 ================= */
@@ -2686,8 +2710,10 @@ function matchSnippet(content, q) {
 function renderSearchHits(q) {
   const list = $('convList');
   const lq = q.toLowerCase();
+  const aid = getActiveId();
   list.innerHTML = '';
   let n = 0;
+  const frag = document.createDocumentFragment();
   getConvs().forEach(c => {
     const title = c.title || t('misc.newConv');
     const titleHit = title.toLowerCase().includes(lq);
@@ -2698,7 +2724,7 @@ function renderSearchHits(q) {
     if (!titleHit && !hitMsg) return;
     n++;
     const b = document.createElement('button');
-    b.className = 'conv' + (c.id === getActiveId() ? ' active' : '');
+    b.className = 'conv' + (c.id === aid ? ' active' : '');
     const tt = document.createElement('span'); tt.className = 'tt';
     const t1 = document.createElement('span'); t1.innerHTML = highlightHtml(title, q);
     const snip = document.createElement('span'); snip.className = 'hit-snip';
@@ -2709,9 +2735,10 @@ function renderSearchHits(q) {
     tt.appendChild(t1); tt.appendChild(snip);
     b.appendChild(tt); b.appendChild(dt);
     b.onclick = () => { setActiveId(c.id); renderChat(); renderHistory(); renderConvList(); resetPracticeUI(); closeDrawer(); };
-    list.appendChild(b);
+    frag.appendChild(b);
   });
   if (!n) list.innerHTML = '<div class="hint">' + t('drawer.noMatch') + '</div>';
+  else list.appendChild(frag);
 }
 
 /* ================= 抽屉 ================= */
@@ -2924,16 +2951,31 @@ function trackChatFromUsage(j) {
   });
   return true;
 }
-/* token 估算（接口没返回用量时兜底）：CJK 按 1 token/字，其他按 4 字符/token */
+/* token 估算（API 未回傳用量時兜底）：CJK 按 1 token／字，其他按 4 字元／token（零正規表達式碼點快速路徑） */
 function estTokens(s) {
   s = String(s || '');
   let cjk = 0, other = 0;
-  for (const ch of s) {
-    if (/[぀-ヿ㐀-䶿一-鿿豈-﫿가-힯｀-￯]/.test(ch)) cjk++;
-    else other++;
+  for (let i = 0, len = s.length; i < len; ) {
+    const cp = s.codePointAt(i);
+    i += cp > 0xFFFF ? 2 : 1;
+    if (
+      cp >= 0x3040 && (
+        cp <= 0x30FF ||
+        (cp >= 0x3400 && cp <= 0x4DBF) ||
+        (cp >= 0x4E00 && cp <= 0x9FFF) ||
+        (cp >= 0xAC00 && cp <= 0xD7AF) ||
+        (cp >= 0xF900 && cp <= 0xFAFF) ||
+        (cp >= 0xFF40 && cp <= 0xFFEF)
+      )
+    ) {
+      cjk++;
+    } else {
+      other++;
+    }
   }
   return Math.ceil(cjk + other / 4);
 }
+if (typeof window !== 'undefined') window.estTokens = estTokens;
 function chatCost(chatIn, chatOut, chatCached, s) {
   const uncachedIn = Math.max(0, chatIn - chatCached); // prompt_tokens 已含 cached，先减掉再按原价算
   return (uncachedIn / 1e6) * (+s.priceIn || 0) + (chatOut / 1e6) * (+s.priceOut || 0) + (chatCached / 1e6) * (+s.priceCached || 0);
@@ -3350,49 +3392,75 @@ function finishPaste(text) {
 }
 /* 画一层锯齿山脊；snow=true 时给最高的几个峰顶加雪盖 */
 /* 折行：德语按词断行，中文按字断行 */
-/* 折行：德语按词断行，中文按字断行；balance=true 时把每行宽度拉齐（避免末行只剩一个标点） */
+/* 折行：西文按詞斷行，中文按字斷行；balance=true 時將每行寬度拉齊（避免末行只剩一個標點） */
 function wrapLines(g, text, maxW, balance) {
-  const tokens = text.match(/[^\s\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+|\s+|[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g) || [];
+  const tokens = String(text || '').match(/[^\s\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]+|\s+|[\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g) || [];
   const items = [];
-  for (const tk of tokens) {
-    if (/^\s+$/.test(tk)) { if (items.length && !items[items.length - 1].sp) items.push({ t: ' ', sp: true }); }
-    else items.push({ t: tk, sp: false });
+  for (let i = 0; i < tokens.length; i++) {
+    const tk = tokens[i];
+    if (/^\s+$/.test(tk)) {
+      if (items.length && !items[items.length - 1].sp) items.push({ t: ' ', sp: true, w: 0 });
+    } else {
+      items.push({ t: tk, sp: false, w: 0 });
+    }
   }
-  const spaceW = g.measureText(' ').width;
-  items.forEach(it => { it.w = it.sp ? spaceW : g.measureText(it.t).width; });
-  const pretty = arr => arr.map(it => it.t).join('').trim();
-  // 贪心：求最少行数 n
+  const widthCache = new Map();
+  const measureToken = tok => {
+    let w = widthCache.get(tok);
+    if (w === undefined) {
+      w = g.measureText(tok).width;
+      widthCache.set(tok, w);
+    }
+    return w;
+  };
+  const spaceW = measureToken(' ');
+  const itemCount = items.length;
+  for (let k = 0; k < itemCount; k++) {
+    const it = items[k];
+    it.w = it.sp ? spaceW : measureToken(it.t);
+  }
+  const prettyRange = (fromIdx, toIdx) => {
+    let out = '';
+    for (let k = fromIdx; k < toIdx; k++) out += items[k].t;
+    return out.trim();
+  };
+  // 貪心：求最少行數 n
   const greedyCuts = [0];
   let lw = 0;
-  for (let k = 0; k < items.length; k++) {
+  for (let k = 0; k < itemCount; k++) {
     const it = items[k];
     if (!it.sp && lw > 0 && lw + it.w > maxW) { greedyCuts.push(k); lw = 0; }
     lw += it.w;
   }
-  greedyCuts.push(items.length);
+  greedyCuts.push(itemCount);
   const n = greedyCuts.length - 1;
   if (!balance || n < 2) {
     const lines = [];
-    for (let i = 0; i < n; i++) lines.push(pretty(items.slice(greedyCuts[i], greedyCuts[i + 1])));
+    for (let i = 0; i < n; i++) lines.push(prettyRange(greedyCuts[i], greedyCuts[i + 1]));
     return lines;
   }
-  // 均衡：按累计宽度切成 n 行，每行目标 total/n；标点避让：行尾不留开括号、行首不留闭标点
+  // 均衡：按累計寬度切成 n 行，每行目標 total/n；標點避讓：行尾不留開括號、行首不留閉標點
   const CLOSE_P = '。？！；：，、）》」…—·';
   const OPEN_P = '（《「『【';
-  const cum = [0];
-  items.forEach(it => cum.push(cum[cum.length - 1] + it.w));
-  const total = cum[cum.length - 1];
+  const cum = new Float64Array(itemCount + 1);
+  const nonSpPrefix = new Int32Array(itemCount + 1);
+  for (let k = 0; k < itemCount; k++) {
+    cum[k + 1] = cum[k] + items[k].w;
+    nonSpPrefix[k + 1] = nonSpPrefix[k] + (items[k].sp ? 0 : 1);
+  }
+  const total = cum[itemCount];
   const cuts = [0];
   for (let i = 1; i < n; i++) {
+    const prevCut = cuts[i - 1];
     const goal = total * i / n;
-    let best = cuts[i - 1] + 1, bd = Infinity;
-    for (let j = cuts[i - 1] + 1; j <= items.length - (n - i); j++) {
-      if (items.slice(cuts[i - 1], j).every(it => it.sp)) continue; // 空行不行
-      const lineW = cum[j] - cum[cuts[i - 1]];
+    let best = prevCut + 1, bd = Infinity;
+    for (let j = prevCut + 1; j <= itemCount - (n - i); j++) {
+      if (nonSpPrefix[j] - nonSpPrefix[prevCut] === 0) continue; // O(1) 前綴和排除純空白行
+      const lineW = cum[j] - cum[prevCut];
       const restW = total - cum[j];
       let d = Math.abs(cum[j] - goal);
-      if (lineW > maxW) d += 1000; // 本行超宽：重罚
-      if (restW > (n - i) * maxW) d += 1000; // 剩下塞不进：重罚
+      if (lineW > maxW) d += 1000; // 本行超寬：重罰
+      if (restW > (n - i) * maxW) d += 1000; // 剩餘塞不進：重罰
       const next = items[j], prev = items[j - 1];
       if (next && !next.sp && CLOSE_P.indexOf(next.t) >= 0) d += 60;
       if (prev && !prev.sp && OPEN_P.indexOf(prev.t) >= 0) d += 60;
@@ -3400,27 +3468,30 @@ function wrapLines(g, text, maxW, balance) {
     }
     cuts.push(best);
   }
-  cuts.push(items.length);
+  cuts.push(itemCount);
   const lines = [];
-  for (let i = 0; i < n; i++) lines.push(pretty(items.slice(cuts[i], cuts[i + 1])));
-  // 兜底：均衡后仍有空行或超宽（单个词本身超宽除外），退回贪心
+  for (let i = 0; i < n; i++) lines.push(prettyRange(cuts[i], cuts[i + 1]));
+  // 兜底：均衡後仍有空行或超寬（單個詞本身超寬除外），退回貪心
   let ok = true;
   for (let i = 0; i < n; i++) {
     if (!lines[i]) { ok = false; break; }
-    let w = 0;
-    for (let k = cuts[i]; k < cuts[i + 1]; k++) w += items[k].w;
+    const w = cum[cuts[i + 1]] - cum[cuts[i]];
     if (w > maxW + 1) {
-      const widest = Math.max.apply(null, items.slice(cuts[i], cuts[i + 1]).filter(it => !it.sp).map(it => it.w));
+      let widest = -Infinity;
+      for (let k = cuts[i]; k < cuts[i + 1]; k++) {
+        if (!items[k].sp && items[k].w > widest) widest = items[k].w;
+      }
       if (widest <= maxW) { ok = false; break; }
     }
   }
   if (!ok) {
     const gl = [];
-    for (let i = 0; i < n; i++) gl.push(pretty(items.slice(greedyCuts[i], greedyCuts[i + 1])));
+    for (let i = 0; i < n; i++) gl.push(prettyRange(greedyCuts[i], greedyCuts[i + 1]));
     return gl;
   }
   return lines;
 }
+if (typeof window !== 'undefined') window.wrapLines = wrapLines;
 /* 圆角矩形路径（打卡图底部数据浮层用） */
 function roundRectPath(g, x, y, w, h, r) {
   g.beginPath();
@@ -3869,7 +3940,10 @@ function renderChat() {
   list.innerHTML = '';
   if (!msgs.length) {
     list.innerHTML = '<div class="hint">' + t('chat.emptyHint', { lang: learnLangName() }) + '</div>';
+    list.scrollTop = list.scrollHeight;
+    return;
   }
+  const frag = document.createDocumentFragment();
   msgs.forEach((m, i) => {
     const div = document.createElement('div');
     div.className = 'msg ' + m.role;
@@ -3881,7 +3955,7 @@ function renderChat() {
     const body = document.createElement('div');
     body.className = 'bubble';
     if (m.failed) {
-      // 发送失败的气泡：显示原因 + 重试按钮
+      // 發送失敗的氣泡：顯示原因 + 重試按鈕
       body.classList.add('failed');
       const err = document.createElement('div');
       err.className = 'fail-text';
@@ -3895,25 +3969,65 @@ function renderChat() {
       body.appendChild(btn);
     } else {
       if (m.role === 'assistant') {
-        body.innerHTML = mdBlock(m.content); // AI 消息渲染 markdown
-        wrapLangSpans(body); // 中文包 .zh，德语包 .de（模糊与否由 CSS 类定）
+        body.innerHTML = mdBlock(m.content); // AI 訊息渲染 Markdown
+        wrapLangSpans(body); // 中文包 .zh，目標語言包 .de（模糊與否由 CSS 類別決定）
       } else {
-        body.textContent = m.content; // 用户消息保持纯文本、不模糊
+        body.textContent = m.content; // 使用者訊息保持純文字、不模糊
       }
       body.title = t('chat.clickAudio');
       bindBubbleClick(body, m);
     }
     div.appendChild(body);
-    list.appendChild(div);
+    frag.appendChild(div);
   });
+  list.appendChild(frag);
   list.scrollTop = list.scrollHeight;
 }
 
-/* 流式输出时直接更新最后一个气泡，避免整列表重渲染 */
+/* 串流輸出時直接定位最後一個氣泡（優先使用 :last-child 快速選擇器，避免整列表配置 NodeList） */
 function lastBubble() {
+  const fast = document.querySelector('#chatList > :last-child .bubble');
+  if (fast) return fast;
   const bubbles = document.querySelectorAll('#chatList .bubble');
   return bubbles[bubbles.length - 1] || null;
 }
+
+/* 串流文字語言層過濾（單次 indexOf 掃描，與 split('\n').filter(...).join('\n') 100% 等價且零陣列配置） */
+function filterStreamLines(content, hideZh, hideDe) {
+  const str = String(content == null ? '' : content);
+  if (!hideZh && !hideDe) return str;
+  if (hideZh && hideDe) return '';
+  const len = str.length;
+  let start = 0;
+  let out = '';
+  let hasKept = false;
+  while (true) {
+    const nl = str.indexOf('\n', start);
+    const end = nl < 0 ? len : nl;
+    let p = start;
+    while (p < end) {
+      const chCode = str.charCodeAt(p);
+      if (chCode === 32 || (chCode >= 9 && chCode <= 13)) {
+        p++;
+      } else if (chCode > 127 && /\s/.test(str[p])) {
+        p++;
+      } else {
+        break;
+      }
+    }
+    const isQuote = p < end && str.charCodeAt(p) === 62;
+    const keep = isQuote ? !hideZh : !hideDe;
+    if (keep) {
+      const seg = (start === 0 && end === len) ? str : str.slice(start, end);
+      out = hasKept ? (out + '\n' + seg) : seg;
+      hasKept = true;
+    }
+    if (nl < 0) break;
+    start = nl + 1;
+  }
+  return out;
+}
+if (typeof window !== 'undefined') window.filterStreamLines = filterStreamLines;
 
 let suppressBubbleClick = false; // 长按弹出编辑后，忽略紧接着的一次点击（避免误触跟读/显隐）
 let bubbleClickTimer = null; // 单击延迟 300ms，等双击判定；双击则取消单击
@@ -4101,19 +4215,27 @@ async function sendChatCore(c) {
     const decoder = new TextDecoder();
     let buf = '', finished = false, streamUsage = null;
     const uiAlive = () => getActiveId() === convId;
+    const chatListEl = document.getElementById('chatList');
+    let streamBubbleEl = uiAlive() ? lastBubble() : null;
+    const hideZh = !s.showZh, hideDe = !effShowDe(s);
     let paintRaf = 0;
     const paintNow = () => {
       paintRaf = 0;
       if (!uiAlive() || !c.messages.includes(aiMsg)) return;
-      const b = lastBubble();
+      const b = (streamBubbleEl && streamBubbleEl.isConnected !== false)
+        ? streamBubbleEl
+        : (streamBubbleEl = lastBubble());
+      const nearBottom = chatListEl
+        ? (chatListEl.scrollHeight - chatListEl.scrollTop - chatListEl.clientHeight < 120)
+        : true;
       if (b) {
-        const hideZh = !s.showZh, hideDe = !effShowDe(s);
-        let pt = aiMsg.content;
-        if (hideZh || hideDe) pt = pt.split('\n').filter(l => l.trimStart().startsWith('>') ? !hideZh : !hideDe).join('\n'); // 流式中按最终显隐状态先滤掉对应语言层
-        b.textContent = pt;
+        b.textContent = (hideZh || hideDe)
+          ? filterStreamLines(aiMsg.content, hideZh, hideDe)
+          : aiMsg.content;
       }
-      const list = $('chatList');
-      list.scrollTop = list.scrollHeight;
+      if (chatListEl && nearBottom) {
+        chatListEl.scrollTop = chatListEl.scrollHeight;
+      }
     };
     const paint = () => { if (!paintRaf) paintRaf = requestAnimationFrame(paintNow); };
     while (!finished) {
@@ -4131,7 +4253,7 @@ async function sendChatCore(c) {
         if (data === '[DONE]') { finished = true; break; }
         try {
           const j = JSON.parse(data);
-          if (j.usage) streamUsage = j.usage; // 流式最后一段可能带用量
+          if (j.usage) streamUsage = j.usage; // 串流最後一段可能附帶用量
           const ch = j.choices && j.choices[0];
           const delta = ch && ch.delta && ch.delta.content;
           if (delta) { aiMsg.content += delta; paint(); }
@@ -4142,19 +4264,25 @@ async function sendChatCore(c) {
     if (paintRaf) { cancelAnimationFrame(paintRaf); paintRaf = 0; }
     if (!aiMsg.content) throw new Error(t('chat.emptyResp'));
     if (!trackChatFromUsage(streamUsage)) {
-      // 接口没返回用量：按字符估算（输入按实际发送的消息，输出按收到的回复）
+      // API 未回傳用量：按字元估算（輸入按實際發送訊息，輸出按收到的回覆）
       let pin = 0;
       apiMsgs.forEach(m => { pin += 4 + estTokens(m.content); });
       trackUsage({ chatIn: pin, chatOut: estTokens(aiMsg.content), chatEstimated: true });
     }
-    trackUsage({ chatRounds: 1 }); // 成功完成一轮问答
+    trackUsage({ chatRounds: 1 }); // 成功完成一輪問答
     persistConv(c);
     if (uiAlive()) {
-      const b = lastBubble();
+      const b = (streamBubbleEl && streamBubbleEl.isConnected !== false) ? streamBubbleEl : lastBubble();
+      const nearBottom = chatListEl
+        ? (chatListEl.scrollHeight - chatListEl.scrollTop - chatListEl.clientHeight < 120)
+        : true;
       if (b) {
-        b.innerHTML = mdBlock(aiMsg.content); // 流式结束，渲染 markdown
+        b.innerHTML = mdBlock(aiMsg.content); // 串流結束，完整渲染 Markdown
         wrapLangSpans(b);
-        bindBubbleClick(b, aiMsg); // 补上点击事件（流式开始时内容为空，还没绑）
+        bindBubbleClick(b, aiMsg); // 補上點擊事件（串流開始時內容為空，尚未綁定）
+      }
+      if (chatListEl && nearBottom) {
+        chatListEl.scrollTop = chatListEl.scrollHeight;
       }
       renderConvList();
       // 自动朗读回复（练听力）：填入跟读框并播放，不滚动抢屏；支持 Gemini 3.8 TTS / Azure TTS / 离线兜底
@@ -4503,7 +4631,7 @@ function resetPracticeUI() {
   deBlurOverride = null;
   refreshSentenceBlur();
   if (lastRefUrl) { URL.revokeObjectURL(lastRefUrl); lastRefUrl = null; }
-  lastRefBlob = null; lastRefPcm16 = null; lastRefText = '';
+  lastRefBlob = null; lastRefPcm16 = null; if (typeof lastRefEnv !== 'undefined') lastRefEnv = null; lastRefText = '';
   refPlayer.clear();
   if (myRecordingUrl) { URL.revokeObjectURL(myRecordingUrl); myRecordingUrl = null; }
   myPlayer.clear();
@@ -4539,7 +4667,7 @@ function initRefRate() {
 }
 
 /* ================= 多引擎原聲 TTS（Gemini 3.8 TTS + Azure Speech + 離線英音兜底） ================= */
-let lastRefBlob = null, lastRefUrl = null, lastRefPcm16 = null;
+let lastRefBlob = null, lastRefUrl = null, lastRefPcm16 = null, lastRefEnv = null;
 
 function getGeminiTtsKey(s) {
   s = s || peekSettings();
@@ -4896,16 +5024,24 @@ function friendlyErr(e) {
   if (/not a function|is not defined|reading .* of (undefined|null)|referenceerror|typeerror|syntaxerror/i.test(m)) return t('err.internal');
   return m || t('err.unknown');
 }
+const ttsMetaMap = new Map(); // 記憶體 TTS 快取索引：'tts:...' -> timestamp
+let ttsMetaHydrated = false;
+
 async function ttsCached(rawText, voice) {
-  const txt = targetLangText(rawText); // 统一过滤：去译文行、去 emoji
+  const txt = targetLangText(rawText); // 統一過濾：去除譯文行與 emoji
   if (!txt) throw new Error(t('sent.emptyBox'));
   const s = getSettings();
   const eng = resolveTtsEngine(s);
   const v = (eng.provider === 'azure' && voice) ? voice : eng.cacheVoice;
   const key = 'tts:' + v + ':' + hashStr(txt);
-  const hit = await idbGet(key).catch(() => null);
-  if (hit && isValidAudioBlob(hit.blob) && hit.text === txt) return { blob: hit.blob, text: txt, cached: true }; // 命中时校验原文：防 hash 冲突播错句子；老缓存无 text 字段/空 blob 视为未命中，重新生成一次即自愈
-  // 都没命中：按文本语言和当前声音是否匹配——不匹配时弹窗提示去设置切换，不默默生成
+  const cached = await idbGet(key).catch(() => null);
+  if (cached && isValidAudioBlob(cached.blob) && cached.text === txt) {
+    if (typeof ttsMetaHydrated !== 'undefined' && ttsMetaHydrated && typeof ttsMetaMap !== 'undefined' && typeof cached.t === 'number') {
+      ttsMetaMap.set(key, cached.t);
+    }
+    return { blob: cached.blob, text: txt, cached: true }; // 命中時校驗原文：防 hash 衝突播錯句子
+  }
+  // 未命中：檢查文字語言與當前聲音是否匹配——不匹配時彈窗提示前往設定切換，不靜默生成
   const guessed = guessLangByScript(txt);
   const vLang = String(v).split('-')[0];
   if (guessed && guessed !== vLang) {
@@ -4920,49 +5056,89 @@ async function ttsCached(rawText, voice) {
       cancel: true
     });
     const abort = new Error('lang-mismatch');
-    abort.silent = true; // 去设置/取消都不弹错，静默中断
+    abort.silent = true; // 前往設定或取消均不彈錯，靜默中斷
     if (go) openSettings();
     throw abort;
   }
   const blob = await ttsBlob(txt, v);
-  trackUsage({ ttsChars: txt.length, ttsCalls: 1 }); // 只有真正调了 API 才计费：缓存命中不计
-  const lim = s.ttsCacheLimit; // 已钳制 0–500；0 = 关闭缓存
+  trackUsage({ ttsChars: txt.length, ttsCalls: 1 }); // 僅實際呼叫 API 時計費：快取命中不計
+  const lim = s.ttsCacheLimit; // 已鉗制 0–500；0 = 關閉快取
   if (lim > 0) {
-    idbSet(key, { blob: blob, t: Date.now(), text: txt }).catch(() => {});
+    const nowTs = Date.now();
+    if (typeof ttsMetaMap !== 'undefined') ttsMetaMap.set(key, nowTs);
+    idbSet(key, { blob: blob, t: nowTs, text: txt }).catch(() => {});
     trimTtsCache(lim).catch(() => {});
   }
   return { blob: blob, text: txt, cached: false };
 }
-/* TTS 缓存淘汰：先用 getAllKeys() 仅检查键数量，未超限时不反序列化任何 Blob 或 json:convs */
+/* TTS 快取淘汰：啟動後由 ttsMetaMap 於記憶體 O(1) 判定是否超限；已水合時淘汰零 Blob 反序列化，直接走 idbDelBatch */
 async function trimTtsCache(limit) {
-  const db = await idb();
-  const allKeys = await new Promise((resolve, reject) => {
-    const tx = db.transaction('audios', 'readonly');
-    const rq = tx.objectStore('audios').getAllKeys();
-    rq.onsuccess = () => resolve(rq.result || []);
-    rq.onerror = () => reject(rq.error);
-  });
-  const ttsKeys = allKeys.filter(k => typeof k === 'string' && k.indexOf('tts:') === 0);
-  if (ttsKeys.length <= limit) return;
+  const keep = Math.max(0, Number(limit) || 0);
+  if (ttsMetaHydrated && ttsMetaMap.size <= keep) return;
 
-  const tts = await new Promise((resolve, reject) => {
-    const out = [];
-    const tx = db.transaction('audios', 'readonly');
-    const store = tx.objectStore('audios');
-    ttsKeys.forEach(k => {
-      const rq = store.get(k);
-      rq.onsuccess = () => { const val = rq.result; out.push({ key: k, t: (val && typeof val.t === 'number') ? val.t : 0 }); };
+  if (!ttsMetaHydrated) {
+    const db = await idb();
+    const allKeys = await new Promise((resolve, reject) => {
+      const tx = db.transaction('audios', 'readonly');
+      const rq = tx.objectStore('audios').getAllKeys();
+      rq.onsuccess = () => resolve(rq.result || []);
+      rq.onerror = () => reject(rq.error);
     });
-    tx.oncomplete = () => resolve(out);
-    tx.onerror = () => reject(tx.error);
-  });
-  tts.sort((a, b) => a.t - b.t);
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction('audios', 'readwrite');
-    tts.slice(0, tts.length - limit).forEach(x => tx.objectStore('audios').delete(x.key));
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
+    const ttsKeys = allKeys.filter(k => typeof k === 'string' && k.indexOf('tts:') === 0);
+    if (keep === 0) {
+      const allToClear = Array.from(new Set(ttsKeys.concat(Array.from(ttsMetaMap.keys()))));
+      ttsMetaMap.clear();
+      ttsMetaHydrated = true;
+      if (allToClear.length) await idbDelBatch(allToClear);
+      return;
+    }
+    const missingKeys = ttsKeys.filter(k => !ttsMetaMap.has(k));
+    if (missingKeys.length > 0) {
+      await new Promise((resolve, reject) => {
+        const tx = db.transaction('audios', 'readonly');
+        const store = tx.objectStore('audios');
+        let pending = missingKeys.length;
+        let settled = false;
+        const finishOne = () => {
+          if (settled) return;
+          if (--pending <= 0) {
+            settled = true;
+            resolve();
+          }
+        };
+        missingKeys.forEach(k => {
+          const rq = store.get(k);
+          rq.onsuccess = () => {
+            if (!ttsMetaMap.has(k)) {
+              const val = rq.result;
+              ttsMetaMap.set(k, (val && typeof val.t === 'number') ? val.t : 0);
+            }
+            finishOne();
+          };
+          rq.onerror = () => finishOne();
+        });
+        tx.onerror = () => {
+          if (!settled) { settled = true; reject(tx.error); }
+        };
+      });
+    }
+    ttsMetaHydrated = true;
+    if (ttsMetaMap.size <= keep) return;
+  }
+
+  const evictCount = ttsMetaMap.size - keep;
+  if (evictCount <= 0) return;
+  const sortedEntries = Array.from(ttsMetaMap.entries()).sort((a, b) => a[1] - b[1]);
+  const keysToRemove = [];
+  for (let i = 0; i < evictCount; i++) {
+    const k = sortedEntries[i][0];
+    ttsMetaMap.delete(k);
+    keysToRemove.push(k);
+  }
+  await idbDelBatch(keysToRemove);
+}
+if (typeof window !== 'undefined') {
+  window.trimTtsCache = trimTtsCache;
 }
 let refGenSeq = 0;
 async function genRefAudio(text, autoplay) {
@@ -4986,6 +5162,7 @@ async function genRefAudio(text, autoplay) {
     if (mySeq !== refGenSeq) return true; // 已有更新的請求，丟棄舊結果
     lastRefBlob = r.blob;
     lastRefPcm16 = null;
+    if (typeof lastRefEnv !== 'undefined') lastRefEnv = null;
     lastRefText = r.text;
     if (lastRefUrl) URL.revokeObjectURL(lastRefUrl);
     lastRefUrl = URL.createObjectURL(r.blob);
@@ -5013,6 +5190,7 @@ async function downloadRefAudio() {
       blob = r.blob;
       lastRefBlob = blob;
       lastRefPcm16 = null;
+      if (typeof lastRefEnv !== 'undefined') lastRefEnv = null;
       lastRefText = r.text;
       if (lastRefUrl) URL.revokeObjectURL(lastRefUrl);
       lastRefUrl = URL.createObjectURL(blob);
@@ -5296,6 +5474,7 @@ async function stopRecording() {
     // 解码为 16kHz 单声道 PCM，用单次识别做发音评估（已验证过的路径）
     const pcm16 = await decodeToPcm16k(blob);
     lastUserPcm16 = pcm16;
+    if (typeof lastUserEnv !== 'undefined') lastUserEnv = null;
     if (!pcm16 || pcm16.length < 4800) throw new Error('錄音時間過短（少於 0.3 秒），請完整朗讀句子後再停止。');
     const r = await assessPcm(pcm16, rs.text);
     pendingRetry = null;
@@ -5345,6 +5524,8 @@ async function retryScoring() {
   btn.textContent = t('rec.scoring');
   try {
     const pcm16 = await decodeToPcm16k(pr.blob);
+    lastUserPcm16 = pcm16;
+    if (typeof lastUserEnv !== 'undefined') lastUserEnv = null;
     const r = await assessPcm(pcm16, pr.text);
     pendingRetry = null;
     renderResult(r.pa, r.recognized);
@@ -5498,7 +5679,59 @@ function phonemeHeard(p) {
   return '';
 }
 
-let lastUserPcm16 = null;
+let lastUserPcm16 = null, lastUserEnv = null;
+
+/* 能量包絡線計算（零 subarray 配置、消除每取樣點除以 32768 運算與 V8 Smi 溢位退優化，與舊版演算法代數等價） */
+function calcEnvelope(pcm16, bins = 60) {
+  if (!pcm16 || !pcm16.length) return new Float32Array(bins);
+  const totalLen = pcm16.length;
+  let start = 0, end = totalLen - 1;
+  while (start < totalLen) {
+    const v = pcm16[start];
+    if (v >= 250 || v <= -250) break;
+    start++;
+  }
+  if (start >= totalLen) return new Float32Array(bins);
+  while (end > start) {
+    const v = pcm16[end];
+    if (v >= 250 || v <= -250) break;
+    end--;
+  }
+  const len = end - start + 1;
+  if (len <= 0) return new Float32Array(bins);
+  const step = len / bins;
+  const env = new Float32Array(bins);
+  let maxRms = 0.0001 * 32768;
+  for (let i = 0; i < bins; i++) {
+    const sIdx = start + Math.floor(i * step);
+    const eIdx = start + Math.min(len, Math.floor((i + 1) * step));
+    const count = eIdx - sIdx;
+    let sumSq0 = -0.0, sumSq1 = -0.0, sumSq2 = -0.0, sumSq3 = -0.0;
+    let j = sIdx;
+    const stop4 = eIdx - 3;
+    for (; j < stop4; j += 4) {
+      const a0 = pcm16[j];
+      const a1 = pcm16[j + 1];
+      const a2 = pcm16[j + 2];
+      const a3 = pcm16[j + 3];
+      sumSq0 += a0 * a0;
+      sumSq1 += a1 * a1;
+      sumSq2 += a2 * a2;
+      sumSq3 += a3 * a3;
+    }
+    let sumSq = (sumSq0 + sumSq1) + (sumSq2 + sumSq3) + 0.0;
+    for (; j < eIdx; j++) {
+      const sample = pcm16[j];
+      sumSq += sample * sample;
+    }
+    const rms = count > 0 ? Math.sqrt(sumSq / count) : 0;
+    env[i] = rms;
+    if (rms > maxRms) maxRms = rms;
+  }
+  for (let i = 0; i < bins; i++) env[i] /= maxRms;
+  return env;
+}
+if (typeof window !== 'undefined') window.calcEnvelope = calcEnvelope;
 
 async function drawProsodyMirror(words) {
   const wrap = $('prosodyMirrorWrap');
@@ -5524,40 +5757,85 @@ async function drawProsodyMirror(words) {
       refPcm = await decodeToPcm16k(targetBlob);
       if (typeof lastRefPcm16 !== 'undefined' && lastRefBlob === targetBlob) {
         lastRefPcm16 = refPcm;
+        if (typeof lastRefEnv !== 'undefined') lastRefEnv = null;
       }
     } catch (e) {}
   }
 
-  const calcEnvelope = (pcm, buckets = 60) => {
-    if (!pcm || !pcm.length) return new Float32Array(buckets);
-    let start = 0, end = pcm.length - 1;
-    while (start < pcm.length && Math.abs(pcm[start]) < 250) start++;
-    while (end > start && Math.abs(pcm[end]) < 250) end--;
-    const slice = pcm.subarray(start, end + 1);
-    const len = slice.length;
-    if (len === 0) return new Float32Array(buckets);
-    const step = len / buckets;
-    const env = new Float32Array(buckets);
-    let max = 0.0001;
-    for (let i = 0; i < buckets; i++) {
-      const sIdx = Math.floor(i * step);
-      const eIdx = Math.min(len, Math.floor((i + 1) * step));
-      let sumSq = 0, count = 0;
-      for (let j = sIdx; j < eIdx; j++) {
-        sumSq += (slice[j] / 32768) * (slice[j] / 32768);
-        count++;
+  const calcEnvelope = (typeof window !== 'undefined' && typeof window.calcEnvelope === 'function') ? window.calcEnvelope : (pcm16, bins = 60) => {
+    if (!pcm16 || !pcm16.length) return new Float32Array(bins);
+    const totalLen = pcm16.length;
+    let start = 0, end = totalLen - 1;
+    while (start < totalLen) {
+      const v = pcm16[start];
+      if (v >= 250 || v <= -250) break;
+      start++;
+    }
+    if (start >= totalLen) return new Float32Array(bins);
+    while (end > start) {
+      const v = pcm16[end];
+      if (v >= 250 || v <= -250) break;
+      end--;
+    }
+    const len = end - start + 1;
+    if (len <= 0) return new Float32Array(bins);
+    const step = len / bins;
+    const env = new Float32Array(bins);
+    let maxRms = 0.0001 * 32768;
+    for (let i = 0; i < bins; i++) {
+      const sIdx = start + Math.floor(i * step);
+      const eIdx = start + Math.min(len, Math.floor((i + 1) * step));
+      const count = eIdx - sIdx;
+      let sumSq0 = -0.0, sumSq1 = -0.0, sumSq2 = -0.0, sumSq3 = -0.0;
+      let j = sIdx;
+      const stop4 = eIdx - 3;
+      for (; j < stop4; j += 4) {
+        const a0 = pcm16[j];
+        const a1 = pcm16[j + 1];
+        const a2 = pcm16[j + 2];
+        const a3 = pcm16[j + 3];
+        sumSq0 += a0 * a0;
+        sumSq1 += a1 * a1;
+        sumSq2 += a2 * a2;
+        sumSq3 += a3 * a3;
+      }
+      let sumSq = (sumSq0 + sumSq1) + (sumSq2 + sumSq3) + 0.0;
+      for (; j < eIdx; j++) {
+        const sample = pcm16[j];
+        sumSq += sample * sample;
       }
       const rms = count > 0 ? Math.sqrt(sumSq / count) : 0;
       env[i] = rms;
-      if (rms > max) max = rms;
+      if (rms > maxRms) maxRms = rms;
     }
-    for (let i = 0; i < buckets; i++) env[i] /= max;
+    for (let i = 0; i < bins; i++) env[i] /= maxRms;
     return env;
   };
 
   const buckets = 60;
-  const userEnv = calcEnvelope(lastUserPcm16, buckets);
-  const refEnv = refPcm ? calcEnvelope(refPcm, buckets) : null;
+  let userEnv = (typeof lastUserEnv !== 'undefined' && lastUserEnv && drawProsodyMirror._uSrc === lastUserPcm16)
+    ? lastUserEnv
+    : null;
+  if (!userEnv) {
+    userEnv = calcEnvelope(lastUserPcm16, buckets);
+    if (typeof lastUserEnv !== 'undefined') {
+      lastUserEnv = userEnv;
+      drawProsodyMirror._uSrc = lastUserPcm16;
+    }
+  }
+  let refEnv = null;
+  if (refPcm) {
+    refEnv = (typeof lastRefEnv !== 'undefined' && lastRefEnv && drawProsodyMirror._rSrc === refPcm)
+      ? lastRefEnv
+      : null;
+    if (!refEnv) {
+      refEnv = calcEnvelope(refPcm, buckets);
+      if (typeof lastRefEnv !== 'undefined') {
+        lastRefEnv = refEnv;
+        drawProsodyMirror._rSrc = refPcm;
+      }
+    }
+  }
 
   const barW = Math.max(1, (w / buckets) * 0.65);
   const spacing = w / buckets;
@@ -5781,6 +6059,9 @@ async function idbGet(key) {
   });
 }
 async function idbDel(key) {
+  if (typeof key === 'string' && key.indexOf('tts:') === 0 && typeof ttsMetaMap !== 'undefined') {
+    ttsMetaMap.delete(key);
+  }
   const db = await idb();
   return new Promise((resolve, reject) => {
     const tx = db.transaction('audios', 'readwrite');
@@ -5789,6 +6070,31 @@ async function idbDel(key) {
     tx.onerror = () => reject(tx.error);
   });
 }
+/* 單一 readwrite 事務批次刪除多個音訊鍵，避免 N+1 事務開銷 */
+function idbDelBatch(keys) {
+  if (!Array.isArray(keys) || !keys.length) return Promise.resolve();
+  const validKeys = [];
+  for (let i = 0; i < keys.length; i++) {
+    const k = keys[i];
+    if (typeof k === 'string' && k) {
+      validKeys.push(k);
+      if (k.indexOf('tts:') === 0 && typeof ttsMetaMap !== 'undefined') {
+        ttsMetaMap.delete(k);
+      }
+    }
+  }
+  if (!validKeys.length) return Promise.resolve();
+  return idb().then(db => new Promise((resolve, reject) => {
+    const tx = db.transaction('audios', 'readwrite');
+    const store = tx.objectStore('audios');
+    for (let i = 0; i < validKeys.length; i++) {
+      store.delete(validKeys[i]);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  })).catch(() => {});
+}
+if (typeof window !== 'undefined') window.idbDelBatch = idbDelBatch;
 /* 按 key 前缀计数（只读 key 不读值，很轻） */
 async function idbCount(prefix) {
   const db = await idb();
@@ -5834,15 +6140,20 @@ function savePracticeRecord(text, pa, recognizedText, myBlob) {
   };
   conv.records = conv.records || [];
   conv.records.unshift(rec);
-  const keepR = getSettings().practiceHistoryLimit; // 已钳制 1–200
+  const keepR = getSettings().practiceHistoryLimit; // 已鉗制 1–200
   if (conv.records.length > keepR) {
-    // 被挤掉的旧记录：同步删掉它的录音（my:），不留孤儿；ref: 顺带清老版本残留
-    conv.records.slice(keepR).forEach(r => {
-      idbDel('my:' + r.id).catch(function(){});
-      idbDel('ref:' + r.id).catch(function(){});
-    });
+    // 被擠掉的舊記錄：單一事務批次刪除對應錄音（my:）與舊版殘留（ref:），不留孤兒
+    const staleKeys = [];
+    const dropped = conv.records.slice(keepR);
+    for (let i = 0; i < dropped.length; i++) {
+      if (dropped[i] && dropped[i].id) {
+        staleKeys.push('my:' + dropped[i].id, 'ref:' + dropped[i].id);
+      }
+    }
+    if (staleKeys.length) idbDelBatch(staleKeys);
     conv.records = conv.records.slice(0, keepR);
   }
+  if (typeof _practiceRecordsRev !== 'undefined') _practiceRecordsRev++;
   persistConv(conv);
   renderHistory();
   if (myBlob) idbSet('my:' + recId, myBlob).catch(function(){});
@@ -5887,8 +6198,10 @@ async function restoreRecord(convId, recId) {
   $('sentenceText').value = rec.text;
   autoGrowTextarea($('sentenceText'));
   lastUserPcm16 = null;
+  if (typeof lastUserEnv !== 'undefined') lastUserEnv = null;
   lastRefBlob = null;
   lastRefPcm16 = null;
+  if (typeof lastRefEnv !== 'undefined') lastRefEnv = null;
   lastRefText = '';
   if (lastRefUrl) { URL.revokeObjectURL(lastRefUrl); lastRefUrl = null; }
   if (refPlayer && refPlayer.clear) refPlayer.clear();
@@ -5896,7 +6209,7 @@ async function restoreRecord(convId, recId) {
   if (myPlayer && myPlayer.clear) myPlayer.clear();
   renderResult(paLikeFromRec(rec), rec.recognizedText || '', true);
   try {
-    // 原声就是 TTS：先兼容旧版本存的 ref:，没有则走 TTS 缓存（一般命中，不调 API）
+    // 原聲即 TTS：先相容舊版儲存的 ref:，若無則走 TTS 快取（一般命中，不調用 API）
     let refBlob = await idbGet('ref:' + recId).catch(() => null);
     if (mySeq !== restoreSeq) return;
     if (!refBlob) {
@@ -5906,8 +6219,11 @@ async function restoreRecord(convId, recId) {
     if (refBlob) {
       if (lastRefUrl) URL.revokeObjectURL(lastRefUrl);
       lastRefUrl = URL.createObjectURL(refBlob);
-      lastRefBlob = refBlob; lastRefPcm16 = null; lastRefText = rec.text;
-      refPlayer.load(lastRefUrl, true); // 自动播放原声
+      lastRefBlob = refBlob;
+      lastRefPcm16 = null;
+      if (typeof lastRefEnv !== 'undefined') lastRefEnv = null;
+      lastRefText = rec.text;
+      refPlayer.load(lastRefUrl, true); // 自動播放原聲
     }
   } catch (e) {}
   if (mySeq !== restoreSeq) return;
@@ -5921,6 +6237,7 @@ async function restoreRecord(convId, recId) {
       const decodedPcm = await decodeToPcm16k(myBlob);
       if (mySeq !== restoreSeq) return;
       lastUserPcm16 = decodedPcm;
+      if (typeof lastUserEnv !== 'undefined') lastUserEnv = null;
       await drawProsodyMirror(paLikeFromRec(rec).detailResult.Words);
     }
   } catch (e) {}
@@ -5937,6 +6254,7 @@ function renderHistory() {
     list.innerHTML = '<div class="hint">' + t('rec.noHistory') + '</div>';
     return;
   }
+  const frag = document.createDocumentFragment();
   recs.forEach(rec => {
     const d = document.createElement('button');
     d.className = 'hist';
@@ -5946,19 +6264,23 @@ function renderHistory() {
     const sm = document.createElement('small'); sm.textContent = fmtDateTime(rec.t);
     d.appendChild(b); d.appendChild(sp); d.appendChild(sm);
     d.onclick = () => restoreRecord(conv.id, rec.id);
-    list.appendChild(d);
+    frag.appendChild(d);
   });
+  list.appendChild(frag);
 }
 
 function deleteConvAudios(conv) {
   const recs = (conv && conv.records) || [];
-  recs.forEach(r => {
-    idbDel('ref:' + r.id).catch(function(){});
-    idbDel('my:' + r.id).catch(function(){});
-  });
+  if (!recs.length) return;
+  const keys = [];
+  for (let i = 0; i < recs.length; i++) {
+    const r = recs[i];
+    if (r && r.id) keys.push('ref:' + r.id, 'my:' + r.id);
+  }
+  if (keys.length) idbDelBatch(keys);
 }
 
-/* 把旧版全局历史迁移到当前对话下 */
+/* 將舊版全域練習歷史遷移至當前對話下 */
 function migrateOldHistory() {
   try {
     const old = JSON.parse(localStorage.getItem(LS_HISTORY) || '[]');
@@ -5976,6 +6298,7 @@ function migrateOldHistory() {
     });
     conv.records.sort((a, b) => b.t - a.t);
     conv.records = conv.records.slice(0, getSettings().practiceHistoryLimit);
+    if (typeof _practiceRecordsRev !== 'undefined') _practiceRecordsRev++;
     persistConv(conv);
   } catch (e) {}
 }
@@ -6058,11 +6381,21 @@ async function init() {
   $('menuBtn').onclick = openDrawer;
   $('closeDrawer').onclick = closeDrawer;
   let lastSearchQ = '';
-  $('convSearch').addEventListener('input', () => {
+  let convSearchTimer = 0;
+  const runConvSearch = () => {
+    if (convSearchTimer) { clearTimeout(convSearchTimer); convSearchTimer = 0; }
     const q = $('convSearch').value.trim();
     renderConvList();
-    if (!q && lastSearchQ) revealActiveConv(true); // 刚清空搜索：把当前选中的对话滚到可见
+    if (!q && lastSearchQ) revealActiveConv(true); // 剛清空搜尋：將當前選中的對話滾動至可見區域
     lastSearchQ = q;
+  };
+  $('convSearch').addEventListener('input', () => {
+    if (convSearchTimer) { clearTimeout(convSearchTimer); convSearchTimer = 0; }
+    if ($('convSearch').value === '') {
+      runConvSearch();
+      return;
+    }
+    convSearchTimer = setTimeout(runConvSearch, 120);
   });
   // 重试按钮：重发上一次失败的请求
   $('chatList').addEventListener('click', e => {
@@ -6129,6 +6462,7 @@ async function init() {
   $('delAllBtn').onclick = async () => {
     if (await confirmDlg(t('drawer.delAllConfirm'), t('dlg.delAll'))) {
       getConvs().forEach(deleteConvAudios);
+      if (typeof _practiceRecordsRev !== 'undefined') _practiceRecordsRev++;
       saveConvs([]); setActiveId('');
       newConversation(); closeDrawer();
     }
@@ -6139,7 +6473,8 @@ async function init() {
     const old = convs.filter(c => (c.createdAt || 0) < cutoff);
     if (!old.length) { await alertDlg(t('drawer.delOldNone', { days: days })); return; }
     if (!await confirmDlg(t('drawer.delOldConfirm', { n: old.length, days: days }))) return;
-    old.forEach(deleteConvAudios); // 录音同步清掉
+    old.forEach(deleteConvAudios); // 錄音批次清除
+    if (typeof _practiceRecordsRev !== 'undefined') _practiceRecordsRev++;
     const rest = convs.filter(c => (c.createdAt || 0) >= cutoff);
     saveConvs(rest);
     if (!rest.some(c => c.id === getActiveId())) setActiveId(rest.length ? rest[0].id : '');
