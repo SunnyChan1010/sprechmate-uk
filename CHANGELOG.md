@@ -2,6 +2,28 @@
 
 本專案遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-TW/) 語意化版本規範，並採用 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/) 格式記錄變更。
 
+## [1.6.0] - 2026-11-12
+
+### 🧠 AI 個人化靶向私教、英式連音標註與全鏈路正確性加固 (Adaptive Phonetic Coaching, Connected Speech & Core Reliability)
+- **F1 個人化發音弱點雷達與 AI 靶向餵招閉環 (`analyzeUserPhonemeWeaknesses` & `getPhoneticCoachingPromptHint`)**：
+  - 自動聚合用戶歷史錄音評分之音素表現，於「🇬🇧 進階之路」動態渲染 `#personalWeaknessRadar` 個人弱點雷達卡片，並高亮標記低分音素專屬解剖晶片（`.is-personal-weak`）。
+  - 打通「評測診斷 ➔ AI 對話靶向餵招」閉環：透過 `getPhoneticCoachingPromptHint()` 將用戶最需加強之英音弱項音素自動注入系統提示詞，讓 AI 私教於日常對話回覆中自然融入對應練習詞彙。
+- **F2 長文精讀「英式連音 (`‿r`) 與虛詞弱讀 (`Weak Forms`)」智慧標註層 (`annotateConnectedSpeech` & `#toggleConnSpeechBtn`)**：
+  - 於「📖 精讀工作坊」工具列新增 `#toggleConnSpeechBtn`（🔗 連音標註）一鍵開關，支援即時解析並視覺化標示英式英語（Non-rhotic RP / SSBE）跨詞母音連讀 `Linking R`（`‿r`）與高頻功能詞弱讀（`Weak Forms` 虛線底線提示），同時完整保留單擊查詞互動。
+- **F3 15 大英國生存任務與 AI 情境劇本雙向聯動 (`UK_STAGE_MISSION_PROMPTS` & `activateMissionRoleplay`)**：
+  - 為 `uk_stages.json` 全部 15 個英國實戰生存任務建立專屬 AI 角色扮演劇本（`UK_STAGE_MISSION_PROMPTS`），點擊任務即可透過 `activateMissionRoleplay(missionId)` 自動創建／切換對應情境對話並掛載目標開場白。
+  - 於「💬 對話跟讀」頂部新增 `#activeMissionBanner` 實戰任務進度橫幅，清晰展示當前挑戰任務、過關門檻（跟讀評分 ≥75 分）與一鍵退出機制。
+- **F4 精讀查詞彈窗「✨ AI 語境精解」與一鍵閃卡收錄 (`askAiContextualExplain` & `#popoverAiBtn`)**：
+  - 於精讀查詞彈窗 `#wordPopover` 新增 `#popoverAiBtn`（✨ AI 語境精解）及記憶體快取 `aiWordExplainCache`，結合原句上下文即時由 Gemini 解析地道英式語氣、潛台詞與用法，並自動將 AI 精解同步寫入「➕ 加入重溫」之 SM-2 閃卡背面筆記。
+- **E1–E5 技術架構與正確性加固 (Engineering & Reliability Hardening)**：
+  - **E1 修復影子電台搶跑 (`playUkVoice` 真實播放完成契約)**：重構 `playUkVoice` 回傳於音訊真正播放結束（`onended` / `speechSynthesis` `end`）時才 resolve 之 Promise，徹底解決 Reading Studio「📻 影子跟讀電台」未等語音播畢即跳句搶跑之問題。
+  - **E2 歷史錄音雙軌語調鏡像與時間軸無損還原 (`restoreRecord`)**：`simplifyWords` 與 `paLikeFromRec` 完整持久化並還原單詞級 `Offset`（`o`）與 `Duration`（`d`），`restoreRecord` 載入前先清空舊 PCM 狀態並重新解碼繪製 `drawProsodyMirror`，根除切換歷史紀錄時殘留舊波形或時間軸錯位。
+  - **E3 每日 5 語塊重溫進度計數與 100 XP 閉環校準 (`dailyReviewsDone`)**：精準追蹤當日實際完成重溫張數 `dailyReviewsDone`，滿 5 個語塊方解鎖每日重溫任務獎勵，並校準每 100 XP 升階門檻與儀表板進度條顯示。
+  - **E4 對話儲存 IndexedDB 配額滿載自癒 (`saveConvs`)**：當 `idbSet('json:convs', payload)` 遭遇 `QuotaExceededError` 時，自動觸發 `trimTtsCache` 清理一半 TTS 語音快取並無感重試一次，保障用戶核心對話與錄音紀錄永不因快取佔滿而遺失。
+  - **E5 工程規格單一事實來源校準 (`AGENT_CONTEXT.md`)**：全面對齊 `v1.6.0` 真實 IndexedDB（`'deutsch-audio'` v2：`audios` + `reviews`）、`localStorage` 鍵名、SM-2 間隔參數（Easy 首兩次 `4 / 7` 天；語音自測 `85 / 70 / 55` 分門檻）與多引擎雲端架構契約。
+
+---
+
 ## [1.5.0] - 2026-11-01
 
 ### 🛡️ Phase 1 ~ Phase 4：系統盲點獵殺、防禦加固與高槓桿戰略演進 (Stability Hardening & Strategic Evolution)
