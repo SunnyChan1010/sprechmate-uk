@@ -2,6 +2,34 @@
 
 本專案遵循 [Semantic Versioning 2.0.0](https://semver.org/lang/zh-TW/) 語意化版本規範，並採用 [Keep a Changelog](https://keepachangelog.com/zh-TW/1.0.0/) 格式記錄變更。
 
+## [1.6.2] - 2026-11-12
+
+### ⚡ 全鏈路執行期效能最佳化與零冗餘 I/O 重構 (P1–P10 Runtime Performance & Memory Optimization)
+- **P1 進階狀態 Write-Through `O(1)` 記憶體快取 (`getProgressionState` & `invalidateProgressionCache`)**：
+  - 引入 `_progressionCache` 與本地日曆日 `_progressionDay` 寫穿式快取，消除任務結算、分頁切換與儀表板更新時高頻重複呼叫 `localStorage.getItem` 與 `JSON.parse` 之同步阻塞開銷，並透過 `storage` 事件監聽與 `invalidateProgressionCache()` 維持跨視窗／備份匯入狀態一致性。
+- **P2 IndexedDB 單一交易批次刪除與零 Blob 反序列化淘汰 (`idbDelBatch` & `ttsMetaMap`)**：
+  - 新增 `idbDelBatch(keys)` 將 `deleteConvAudios`、`applyHistoryLimits` 與 `savePracticeRecord` 之多鍵刪除合併於單一 `'readwrite'` 交易完成，徹底消除 N+1 交易風暴。
+  - 建立記憶體時間戳索引 `ttsMetaMap`（`'tts:...' -> timestamp`），使 `trimTtsCache(limit)` 於未超限時達成 `O(1)` 零 IndexedDB I/O 短路返回；超限淘汰時直接於記憶體排序時間戳並呼叫 `idbDelBatch`，免除反序列化二進位音訊 `Blob` 之記憶體與磁碟開銷。
+- **P3 AI 對話串流 DOM 參考快取與條件式智慧捲動 (`sendChatCore`、`lastBubble` & `filterStreamLines`)**：
+  - 於 SSE 串流開始前快取 `#chatList` 與最末訊息氣泡節點（最佳化 `lastBubble()` 優先查詢 `#chatList > :last-child .bubble`），抽離等價純函式 `filterStreamLines(content, hideZh, hideDe)`，並於更新氣泡文字前先判定使用者是否位於底部區域（`nearBottom < 120px`）方觸發自動捲動，消除每幀全域 `querySelectorAll` 與回看對話時被強制拉回底部之干擾。
+- **P4 練習紀錄版本號記憶化快取 (`_practiceRecordsRev`、`analyzeUserPhonemeWeaknesses` & `computeConvPracticeStats`)**：
+  - 於對話與錄音紀錄載入、新增、裁剪、刪除或匯入時遞增版本計數器 `getPracticeRecordsRev()`，為個人發音弱點雷達與「🇬🇧 進階之路」練習統計提供版本鍵值記憶化（Memoization），避免每次 XP 變動或切換分頁時重複掃描數千筆歷史音素紀錄。
+- **P5 韻律鏡像包絡線快取與代數無除法正規化 (`calcEnvelope`、`lastRefEnv` & `lastUserEnv`)**：
+  - 重構 `calcEnvelope(pcm16, bins)` 直接以索引區間步進累加 `sample * sample`（零 `pcm16.subarray()` 切片配置），利用均方根比例尺度不變性省去每個採樣點除以 `32768` 之浮點運算（維持 `< 1e-12` 嚴格數學等價），並快取 `lastRefEnv` 與 `lastUserEnv` 避免重繪時重複計算包絡線。
+- **P6 `DocumentFragment` 離線批次掛載、詞庫事件委派、靜態特訓手風琴複用與搜尋防抖**：
+  - 於 `renderConvList`、`renderSearchHits`、`renderHistory`、`renderStagesDashboard` 及 `renderPhrasebookList` 全面採用 `DocumentFragment` 單次掛載；將生詞本按鈕改為 `#phrasebookList` 容器級 `[data-pb-act]` 事件委派，並去重單次互動內重複之 `getDueReviews()`／`updateDueBadge()` 掃描。
+  - 為 `#convSearch` 與 `#phrasebookSearch` 加入 `120ms` 輸入防抖（清空搜尋框時即時更新）；同時於 `renderDrillsAccordion` 快取資料與語系參考，使獲得 XP 或重繪儀表板時完整保留已展開之英音特訓手風琴 DOM 狀態。
+- **P7 靜態 `Set`／預編譯 `RegExp` 常數提升與零正規表達式 Token 估算 (`estTokens`)**：
+  - 將 `CONN_WEAK_WORDS_SET`、連音標註規則與 `CARD_PHONETIC_RULES` 提升至 `uk_engine.js` 模組頂層（零單次呼叫正規表達式／集合配置），並將 `estTokens(s)` 改寫為 Unicode 碼點區間直判快徑，消除逐字元正規表達式 `.test()` 開銷。
+- **P8 音訊預熱有界併發工作池 (`PREHEAT_CONCURRENCY = 3` & `runPreheatPool`)**：
+  - 新增共享 3 路併發佇列 `runPreheatPool`，重構精讀整篇預熱（`preheatReadingSentences`）與地鐵特訓包預熱（`preheatDrillsPack`），在完整保留進度顯示、取消中斷與單句容錯之前提下將批次 TTS 預快取速度提升近 3 倍。
+- **P9 打卡卡片斷行前綴和與字寬快取最佳化 (`wrapLines`)**：
+  - 於 `wrapLines(g, text, maxW, balance)` 內快取重複權杖之 `measureText` 寬度（`Map`），並預先建立非空白權杖前綴和陣列 `nonSpPrefix`（`Int32Array`），以 `O(1)` 差值查詢取代動態規劃內層迴圈之 `.slice().every()` 二次方陣列配置。
+- **P10 Service Worker 快取控制代碼記憶化與版本升級 (`sw.js` `sprechmate-uk-v12` & `getAppCache`)**：
+  - 升級快取版本至 `sprechmate-uk-v12`，新增模組級 `getAppCache()` 記憶化單例 `caches.open(CACHE)` Promise（失敗自動重置），於 `install`、`getCachedFallback(req)` 與背景寫回直接操作已開啟之 `Cache` 控制代碼而非每次攔截掃描全域 `CacheStorage`，並 100% 保留 Captive Portal `text/html` 防污染、`AbortController` 逾時中止與同源 `GET` 安全防線。
+
+---
+
 ## [1.6.1] - 2026-11-12
 
 ### 🛡️ 全鏈路應用安全加固、音訊生命週期治理與渲染效能最佳化 (AppSec Hardening, Audio Lifecycle & Runtime Optimization)
