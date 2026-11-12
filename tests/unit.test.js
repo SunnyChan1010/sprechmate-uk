@@ -393,5 +393,677 @@ test('calcEnvelope: 靜音無 NaN、音訊能量精確歸一化為 60 格包絡'
   assert.ok(Math.max(...toneEnv) >= 0.99, '峰值必須歸一化至 1.0');
 });
 
+/* ---------- E1：playUkVoice & stopCurrentUkAudio 播放完成/中斷 Promise 契約 ---------- */
+function makeAudioSandbox(opts = {}) {
+  const createdUrls = [];
+  const revokedUrls = [];
+  let lastAudio = null;
+  let lastUtterance = null;
+  let recordingActive = !!opts.recordingActive;
+
+  class MockAudio {
+    constructor(url) {
+      this.src = url;
+      this.duration = opts.audioDuration !== undefined ? opts.audioDuration : 2.25;
+      this.onended = null;
+      this.onerror = null;
+      this.onpause = null;
+      this.paused = false;
+      lastAudio = this;
+    }
+    play() {
+      if (opts.playReject) return Promise.reject(new Error('NotAllowedError'));
+      return Promise.resolve();
+    }
+    pause() {
+      this.paused = true;
+    }
+  }
+
+  class MockUtterance {
+    constructor(txt) {
+      this.text = txt;
+      this.lang = '';
+      this.voice = null;
+      this.onend = null;
+      this.onerror = null;
+      lastUtterance = this;
+    }
+  }
+
+  const speechSynth = {
+    canceledCount: 0,
+    cancel() { this.canceledCount++; },
+    getVoices() { return [{ lang: 'en-GB', name: 'UK Offline' }]; },
+    speak(utt) { lastUtterance = utt; }
+  };
+
+  const win = {
+    isAudioRecordingActive: () => recordingActive,
+    speechSynthesis: speechSynth
+  };
+
+  const ctx = load([
+    'let currentUkAudio = null;',
+    'let currentUkAudioUrl = null;',
+    'let currentUkAudioDone = null;',
+    'let ukVoiceSeq = 0;',
+    extractFunction(engine, 'stopCurrentUkAudio'),
+    extractFunction(engine, 'playUkVoice'),
+    'this.playUkVoice = playUkVoice;',
+    'this.stopCurrentUkAudio = stopCurrentUkAudio;'
+  ].join('\n'), {
+    window: win,
+    navigator: { onLine: opts.onLine !== undefined ? opts.onLine : true },
+    Audio: MockAudio,
+    SpeechSynthesisUtterance: MockUtterance,
+    URL: {
+      createObjectURL: () => {
+        const u = 'blob:uk-' + (createdUrls.length + 1);
+        createdUrls.push(u);
+        return u;
+      },
+      revokeObjectURL: (u) => { revokedUrls.push(u); }
+    },
+    getSettings: () => (opts.settings || { azureKey: 'az-key', azureRegion: 'uksouth' }),
+    canUseCloudTts: opts.canUseCloudTts || (s => !!(s && s.azureKey && s.azureRegion)),
+    ttsCached: opts.ttsCached || (async () => ({ blob: { mock: true } })),
+    setTimeout,
+    clearTimeout
+  });
+
+  return {
+    ctx,
+    createdUrls,
+    revokedUrls,
+    speechSynth,
+    getLastAudio: () => lastAudio,
+    getLastUtterance: () => lastUtterance,
+    setRecordingActive: (val) => { recordingActive = val; }
+  };
+}
+
+test('E1 playUkVoice: 雲端 Audio 必須等待 onended 才 resolve { durationMs, interrupted: false } 並釋放 Blob URL', async () => {
+  const sb = makeAudioSandbox({ audioDuration: 2.4 });
+  let resolved = false;
+  const p = sb.ctx.playUkVoice('Mind the gap, please.').then(res => {
+    resolved = true;
+    return res;
+  });
+
+  await new Promise(r => setImmediate(r));
+  assert.equal(resolved, false, 'a.play() 啟動後、onended 觸發前 Promise 不得提前完成');
+  assert.equal(sb.createdUrls.length, 1);
+
+  sb.getLastAudio().onended();
+  const res = await p;
+  assert.equal(resolved, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(res)), { durationMs: 2400, interrupted: false });
+  assert.deepEqual(sb.revokedUrls, sb.createdUrls, '播放結束必須呼叫 URL.revokeObjectURL');
+});
+
+test('E1 stopCurrentUkAudio: 中途停止播放時立即 resolve { durationMs: 0, interrupted: true } 不懸掛', async () => {
+  const sb = makeAudioSandbox({ audioDuration: 3.5 });
+  const p = sb.ctx.playUkVoice('Lovely weather for ducks.');
+  await new Promise(r => setImmediate(r));
+  assert.ok(sb.getLastAudio(), '應已建立 Audio 實例');
+
+  sb.ctx.stopCurrentUkAudio();
+  const res = await p;
+  assert.deepEqual(JSON.parse(JSON.stringify(res)), { durationMs: 0, interrupted: true });
+  assert.equal(sb.getLastAudio().paused, true);
+  assert.deepEqual(sb.revokedUrls, sb.createdUrls, '中斷播放亦須釋放 Blob URL');
+});
+
+test('E1 playUkVoice: 離線 speechSynthesis 完成與中斷契約、以及錄音中互斥守衛', async () => {
+  const sb = makeAudioSandbox({ onLine: false });
+  const p1 = sb.ctx.playUkVoice('Cheers mate', true);
+  await new Promise(r => setImmediate(r));
+  const utt1 = sb.getLastUtterance();
+  assert.ok(utt1 && utt1.lang === 'en-GB');
+  utt1.onend();
+  const res1 = await p1;
+  assert.equal(res1.interrupted, false);
+  assert.equal(typeof res1.durationMs, 'number');
+
+  const p2 = sb.ctx.playUkVoice('Fancy a cuppa?', true);
+  await new Promise(r => setImmediate(r));
+  sb.ctx.stopCurrentUkAudio();
+  const res2 = await p2;
+  assert.deepEqual(JSON.parse(JSON.stringify(res2)), { durationMs: 0, interrupted: true });
+
+  sb.setRecordingActive(true);
+  const resRec = await sb.ctx.playUkVoice('Should not speak while recording');
+  assert.deepEqual(JSON.parse(JSON.stringify(resRec)), { durationMs: 0, interrupted: true });
+
+  sb.setRecordingActive(false);
+  const resEmpty = await sb.ctx.playUkVoice('');
+  assert.deepEqual(JSON.parse(JSON.stringify(resEmpty)), { durationMs: 0, interrupted: false });
+});
+
+/* ---------- E2：simplifyWords & paLikeFromRec 單詞時間軸無損保存與還原 ---------- */
+test('E2 simplifyWords & paLikeFromRec: 無損保存與還原單詞 Offset (o) 與 Duration (d) 時間軸', () => {
+  const e2Ctx = load([
+    extractFunction(html, 'phonemeSym'),
+    extractFunction(html, 'phonemeHeard'),
+    extractFunction(html, 'simplifyWords'),
+    extractFunction(html, 'paLikeFromRec'),
+    'this.simplifyWords = simplifyWords; this.paLikeFromRec = paLikeFromRec;'
+  ].join('\n'));
+
+  const mockPa = {
+    detailResult: {
+      Words: [
+        {
+          Word: 'spot',
+          Offset: 1200000,
+          Duration: 3400000,
+          PronunciationAssessment: { AccuracyScore: 91.6, ErrorType: 'None' },
+          Phonemes: [
+            {
+              Phoneme: 'ɒ',
+              PronunciationAssessment: {
+                AccuracyScore: 68.4,
+                NBestPhonemes: [{ Phoneme: 'ɔː' }, { Phoneme: 'ɒ' }]
+              }
+            }
+          ]
+        },
+        {
+          Word: 'on',
+          Offset: 4800000,
+          Duration: 2100000,
+          PronunciationAssessment: { AccuracyScore: 95, ErrorType: 'None' },
+          Phonemes: []
+        },
+        {
+          Word: 'mate',
+          PronunciationAssessment: { AccuracyScore: 80, ErrorType: 'None' }
+        }
+      ]
+    }
+  };
+
+  const simplified = JSON.parse(JSON.stringify(e2Ctx.simplifyWords(mockPa)));
+  assert.equal(simplified.length, 3);
+  assert.equal(simplified[0].w, 'spot');
+  assert.equal(simplified[0].o, 1200000);
+  assert.equal(simplified[0].d, 3400000);
+  assert.equal(simplified[0].score, 92);
+  assert.equal(simplified[0].phonemes[0].h, 'ɔː');
+  assert.equal(simplified[1].o, 4800000);
+  assert.equal(simplified[1].d, 2100000);
+  assert.equal(simplified[2].o, 0, '缺少 Offset 時安全預設為 0');
+  assert.equal(simplified[2].d, 0, '缺少 Duration 時安全預設為 0');
+
+  const restored = JSON.parse(JSON.stringify(e2Ctx.paLikeFromRec({
+    score: 90,
+    accuracy: 89,
+    fluency: 92,
+    completeness: 100,
+    words: simplified
+  })));
+  assert.equal(restored.pronunciationScore, 90);
+  assert.equal(restored.accuracyScore, 89);
+  assert.equal(restored.detailResult.Words[0].Offset, 1200000);
+  assert.equal(restored.detailResult.Words[0].Duration, 3400000);
+  assert.equal(restored.detailResult.Words[0].Phonemes[0].PronunciationAssessment.NBestPhonemes[0].Phoneme, 'ɔː');
+  assert.equal(restored.detailResult.Words[1].Offset, 4800000);
+  assert.equal(restored.detailResult.Words[1].Duration, 2100000);
+});
+
+/* ---------- E3：applyReviewRating & markDailyQuest 每日 5 語塊計數與 100 XP 閉環 ---------- */
+function makeProgressionSandbox(initialDeck) {
+  const lsMap = Object.create(null);
+  const localStorageMock = {
+    getItem: (k) => (k in lsMap ? lsMap[k] : null),
+    setItem: (k, v) => { lsMap[k] = String(v); }
+  };
+
+  const ctx = load([
+    "const LS_PROGRESSION = 'uk_progression_state';",
+    'let reviewAutoTimer = null;',
+    `let reviewsCache = ${JSON.stringify(initialDeck || [])};`,
+    extractFunction(engine, 'localDayStr'),
+    extractFunction(engine, 'getProgressionState'),
+    extractFunction(engine, 'saveProgressionState'),
+    extractFunction(engine, 'addProgressionXp'),
+    extractFunction(engine, 'markDailyQuest'),
+    extractFunction(engine, 'getDueReviews'),
+    extractFunction(engine, 'calcNextReview'),
+    extractFunction(engine, 'applyReviewRating'),
+    'this.getProgressionState = getProgressionState;',
+    'this.saveProgressionState = saveProgressionState;',
+    'this.markDailyQuest = markDailyQuest;',
+    'this.applyReviewRating = applyReviewRating;',
+    'this.getDeck = () => reviewsCache;'
+  ].join('\n'), {
+    localStorage: localStorageMock,
+    usageDay: () => '2026-11-12',
+    persistReviewsCache: () => {},
+    renderReviewStudio: () => {},
+    renderStagesDashboard: () => {},
+    clearTimeout,
+    setTimeout
+  });
+
+  return { ctx, lsMap };
+}
+
+test('E3 markDailyQuest: 三項日常任務獎勵精準校準為 30 + 35 + 35 = 100 XP 且不重複發放', () => {
+  const { ctx } = makeProgressionSandbox([]);
+  const initXp = ctx.getProgressionState().xp; // 60 XP
+  ctx.markDailyQuest('review');
+  assert.equal(ctx.getProgressionState().xp, initXp + 30, 'review 任務應獎勵 +30 XP');
+  ctx.markDailyQuest('review');
+  assert.equal(ctx.getProgressionState().xp, initXp + 30, '同一日重入不得重複加分');
+
+  ctx.markDailyQuest('reading');
+  assert.equal(ctx.getProgressionState().xp, initXp + 30 + 35, 'reading 任務應獎勵 +35 XP');
+
+  ctx.markDailyQuest('chat');
+  assert.equal(ctx.getProgressionState().xp, initXp + 100, '三項日常任務合計應恰好為 100 XP');
+});
+
+test('E3 applyReviewRating: dailyReviewsDone 逐張遞增，滿 5 張或待重溫歸零時觸發 review 任務，跨日自動歸零', () => {
+  const now = Date.now();
+  const sixDueCards = Array.from({ length: 6 }, (_, i) => ({
+    id: 'c' + (i + 1),
+    text: 'chunk ' + (i + 1),
+    dueDate: now - 60000,
+    reps: 0,
+    interval: 0,
+    easeFactor: 2.5,
+    lapses: 0,
+    history: []
+  }));
+  const { ctx } = makeProgressionSandbox(sixDueCards);
+
+  // 前 4 張（尚有剩餘到期卡）：dailyReviewsDone 遞增至 4，每張 +15 XP，尚未觸發 review 任務 (+30 XP)
+  for (let i = 0; i < 4; i++) {
+    ctx.applyReviewRating(ctx.getDeck()[i], 3, 82);
+    const st = ctx.getProgressionState();
+    assert.equal(st.dailyReviewsDone, i + 1);
+    assert.equal(st.quests.review, false, `第 ${i + 1} 張時尚有未重溫卡，不應提前完成任務`);
+  }
+  assert.equal(ctx.getProgressionState().xp, 60 + 4 * 15);
+
+  // 第 5 張（尚餘第 6 張到期卡）：達成 5 張門檻，觸發 review 任務 (+30 XP)
+  ctx.applyReviewRating(ctx.getDeck()[4], 4, 90);
+  const stAfter5 = ctx.getProgressionState();
+  assert.equal(stAfter5.dailyReviewsDone, 5);
+  assert.equal(stAfter5.quests.review, true, '完成第 5 張應觸發 review 任務');
+  assert.equal(stAfter5.xp, 60 + 5 * 15 + 30);
+
+  // 情境 B：若總到期卡僅 2 張，全數重溫完畢（getDueReviews().length === 0）即完成任務
+  const twoCards = [
+    { id: 'only1', text: 'cheers', dueDate: now - 1000, reps: 0, interval: 0, easeFactor: 2.5, lapses: 0 },
+    { id: 'only2', text: 'ta', dueDate: now - 1000, reps: 0, interval: 0, easeFactor: 2.5, lapses: 0 }
+  ];
+  const sbShort = makeProgressionSandbox(twoCards);
+  sbShort.ctx.applyReviewRating(sbShort.ctx.getDeck()[0], 3, 80);
+  assert.equal(sbShort.ctx.getProgressionState().quests.review, false);
+  sbShort.ctx.applyReviewRating(sbShort.ctx.getDeck()[1], 3, 85);
+  assert.equal(sbShort.ctx.getProgressionState().dailyReviewsDone, 2);
+  assert.equal(sbShort.ctx.getProgressionState().quests.review, true, '所有到期卡清空時應自動完成晨間重溫任務');
+
+  // 跨日重置檢驗
+  const stOldDay = sbShort.ctx.getProgressionState();
+  stOldDay.dailyDate = '2026-11-11';
+  sbShort.ctx.saveProgressionState(stOldDay);
+  const rolled = sbShort.ctx.getProgressionState();
+  assert.equal(rolled.dailyDate, '2026-11-12');
+  assert.equal(rolled.dailyReviewsDone, 0);
+  assert.equal(rolled.quests.review, false);
+});
+
+/* ---------- E4：saveConvs IndexedDB QuotaExceededError 自癒機制 ---------- */
+test('E4 saveConvs: 遭遇 QuotaExceededError 時自動呼叫 trimTtsCache 並單次重試成功，不誤彈滿載警告', async () => {
+  const calls = [];
+  let alerts = 0;
+  let attempt = 0;
+
+  const quotaCtx = load([
+    "const IDB_CONVS_KEY = 'json:convs';",
+    'let convsCache = null;',
+    'let convsLoaded = true;',
+    'let convsSaveWarned = false;',
+    extractFunction(html, 'saveConvs'),
+    'this.saveConvs = saveConvs;',
+    'this.getWarned = () => convsSaveWarned;',
+    'this.setLoaded = v => { convsLoaded = v; };'
+  ].join('\n'), {
+    getSettings: () => ({ ttsCacheLimit: 80 }),
+    trimTtsCache: async (keepCount) => {
+      calls.push(['trimTtsCache', keepCount]);
+    },
+    idbSet: async (key, val) => {
+      attempt++;
+      calls.push(['idbSet', key, attempt]);
+      if (attempt === 1) {
+        const qErr = new Error('The quota has been exceeded.');
+        qErr.name = 'QuotaExceededError';
+        throw qErr;
+      }
+    },
+    alertDlg: () => { alerts++; },
+    t: (k) => k
+  });
+
+  await quotaCtx.saveConvs([{ id: 'conv_1', messages: [] }]);
+  assert.deepEqual(calls, [
+    ['idbSet', 'json:convs', 1],
+    ['trimTtsCache', 40],
+    ['idbSet', 'json:convs', 2]
+  ]);
+  assert.equal(alerts, 0, '自癒重試成功時不得彈出 storageFull 警告');
+  assert.equal(quotaCtx.getWarned(), false);
+
+  // 未載入完成前呼叫 saveConvs 不得觸碰 IndexedDB
+  quotaCtx.setLoaded(false);
+  await quotaCtx.saveConvs([{ id: 'conv_2', messages: [] }]);
+  assert.equal(calls.length, 3, 'convsLoaded 為 false 時禁止寫入 IndexedDB');
+});
+
+test('E4 saveConvs: 若裁剪快取後重試依然滿載，僅彈出一次 storageFull 警告', async () => {
+  let alerts = 0;
+  let trimArg = null;
+  const failCtx = load([
+    "const IDB_CONVS_KEY = 'json:convs';",
+    'let convsCache = null;',
+    'let convsLoaded = true;',
+    'let convsSaveWarned = false;',
+    extractFunction(html, 'saveConvs'),
+    'this.saveConvs = saveConvs;'
+  ].join('\n'), {
+    getSettings: () => ({ ttsCacheLimit: 6 }),
+    trimTtsCache: async (keepCount) => { trimArg = keepCount; },
+    idbSet: async () => {
+      const err = new Error('Quota exceeded');
+      err.name = 'QuotaExceededError';
+      throw err;
+    },
+    alertDlg: () => { alerts++; },
+    t: (k) => k
+  });
+
+  await failCtx.saveConvs([{ id: 'c1' }]);
+  await failCtx.saveConvs([{ id: 'c1' }]);
+  assert.equal(trimArg, 5, '最小保留門檻 Math.max(5, floor(6/2)) 應為 5');
+  assert.equal(alerts, 1, '連續失敗僅提示一次，不洗版');
+});
+
+/* ---------- F1：analyzeUserPhonemeWeaknesses & getPhoneticCoachingPromptHint ---------- */
+test('F1 analyzeUserPhonemeWeaknesses & getPhoneticCoachingPromptHint: 聚合 <75 分音素混淆、排序與 count>=2 靶向提示門檻', () => {
+  let mockConvs = [];
+  const f1Ctx = load([
+    extractFunction(engine, 'resolvePhoneticGuideKey'),
+    extractFunction(engine, 'analyzeUserPhonemeWeaknesses'),
+    extractFunction(engine, 'getPhoneticCoachingPromptHint'),
+    'this.analyze = analyzeUserPhonemeWeaknesses;',
+    'this.getHint = getPhoneticCoachingPromptHint;'
+  ].join('\n'), {
+    getConvs: () => mockConvs
+  });
+
+  // 僅出現 1 次的低分音素：analyze 可見，但 getPhoneticCoachingPromptHint 不應觸發（需 count >= 2）
+  mockConvs = [{
+    records: [
+      {
+        t: 1000,
+        words: [
+          { w: 'think', phonemes: [{ p: 'θ', s: 60, h: 's' }, { p: 'ɪ', s: 88, h: 'ɪ' }] }
+        ]
+      }
+    ]
+  }];
+  const singleRes = JSON.parse(JSON.stringify(f1Ctx.analyze(mockConvs, 30)));
+  assert.equal(singleRes.length, 1);
+  assert.equal(singleRes[0].phoneme, 'θ');
+  assert.equal(singleRes[0].count, 1);
+  assert.equal(f1Ctx.getHint(), '', 'count < 2 時不應輸出教練靶向提示詞');
+
+  // 多筆紀錄：驗證 <75 過濾（排除 s=0 與 s>=75）、混淆統計、頻次優先/均分次之排序、以及 maxRecords 截斷
+  mockConvs = [
+    {
+      records: [
+        {
+          t: 3000,
+          words: [
+            { w: 'think', phonemes: [{ p: 'θ', s: 58, h: 's' }] },
+            { w: 'three', phonemes: [{ p: 'θ', s: 62, h: 'f' }] },
+            { w: 'very', phonemes: [{ p: 'v', s: 50, h: 'w' }] }
+          ]
+        },
+        {
+          t: 2000,
+          words: [
+            { w: 'through', phonemes: [{ p: 'θ', s: 60, h: 's' }] },
+            { w: 'voice', phonemes: [{ p: 'v', s: 54, h: 'w' }] },
+            { w: 'this', phonemes: [{ p: 'ð', s: 65, h: 'd' }, { p: 'ɪ', s: 90, h: 'ɪ' }, { p: 's', s: 0, h: '' }] }
+          ]
+        },
+        {
+          t: 1500,
+          words: [
+            { w: 'brother', phonemes: [{ p: 'ð', s: 69, h: 'd' }] }
+          ]
+        },
+        {
+          t: 100, // 超出 maxRecords=3 時應被忽略的舊紀錄
+          words: [
+            { w: 'milk', phonemes: [{ p: 'ɫ', s: 40, h: 'u' }, { p: 'ɫ', s: 42, h: 'u' }, { p: 'ɫ', s: 44, h: 'u' }, { p: 'ɫ', s: 46, h: 'u' }] }
+          ]
+        }
+      ]
+    }
+  ];
+
+  const limited = JSON.parse(JSON.stringify(f1Ctx.analyze(mockConvs, 3)));
+  assert.equal(limited.some(x => x.phoneme === 'ɫ'), false, '超出最近 maxRecords 筆的舊紀錄不得納入統計');
+  assert.equal(limited[0].phoneme, 'θ', '出現 3 次的 /θ/ 應排第一');
+  assert.equal(limited[0].count, 3);
+  assert.equal(limited[0].avgScore, 60);
+  assert.equal(limited[0].topConfusedWith, 's');
+  assert.equal(limited[0].topConfusedCount, 2);
+  assert.deepEqual(limited[0].sampleWords, ['think', 'three', 'through']);
+
+  // /v/ 與 /ð/ 皆為 count=2，但 /v/ avgScore=52 低於 /ð/ avgScore=67，故 /v/ 應排第二
+  assert.equal(limited[1].phoneme, 'v');
+  assert.equal(limited[1].avgScore, 52);
+  assert.equal(limited[1].guideKey, 'v');
+  assert.equal(limited[2].phoneme, 'ð');
+  assert.equal(limited[2].avgScore, 67);
+
+  const hint = f1Ctx.getHint();
+  assert.ok(hint.startsWith('[Phonetic Coaching Target]:'), '應產生英文靶向教練提示');
+  assert.ok(hint.includes('/θ/ (confused with /s/)'), '提示應包含最高頻弱項與常見誤讀音');
+});
+
+/* ---------- F2：annotateConnectedSpeech 英式連音 (‿r) 與虛詞弱讀標註 ---------- */
+const f2Ctx = load([
+  extractLine(html, /const esc = s =>.*$/m),
+  extractFunction(engine, 'annotateConnectedSpeech'),
+  'this.annotate = annotateConnectedSpeech;'
+].join('\n'));
+
+test('F2 annotateConnectedSpeech: 準確標註 Linking R (‿r) 與非句尾 Weak Forms，並保留所有 .rd-word 查詞節點', () => {
+  // "far away" & "more apples" 觸發 Linking R；非句尾 "for" / "a" / "of" 觸發 .rd-weak；句尾 "for?" 不得弱讀
+  const out = f2Ctx.annotate('Wait for a cup of tea far away, what is it for?', true);
+  assert.ok(out.includes('class="conn-link-r"'), 'far away 之間應標註英式連音 .conn-link-r');
+  assert.ok(out.includes('>‿r<'), '應渲染連音符號 ‿r');
+  assert.ok(out.includes('<span class="rd-word rd-weak" style="cursor:pointer" title="英式虛詞弱讀 (Weak Form)：輕讀短促 /ə/">for</span>'), '句中 for 應標為弱讀');
+  assert.ok(out.includes('<span class="rd-word rd-weak" style="cursor:pointer" title="英式虛詞弱讀 (Weak Form)：輕讀短促 /ə/">of</span>'), '句中 of 應標為弱讀');
+  assert.ok(out.includes('<span class="rd-word" style="cursor:pointer">for?</span>'), '句尾強讀虛詞 for? 絕不可標為 .rd-weak');
+
+  // 逗號阻斷連音：far, away 不應出現 ‿r
+  const commaBlocked = f2Ctx.annotate('So far, away from home', true);
+  assert.ok(!commaBlocked.includes('conn-link-r'), '詞尾帶逗號時不得標註 Linking R');
+  // 無標點句尾虛詞亦不可弱讀
+  const bareEndWeak = f2Ctx.annotate('Who did you speak to', true);
+  assert.ok(bareEndWeak.endsWith('<span class="rd-word" style="cursor:pointer">to</span>'), '句末最後一詞 to 不應標為 .rd-weak');
+
+  // 關閉開關時：無 .conn-link-r 與 .rd-weak，但完整保留 .rd-word
+  const disabledOut = f2Ctx.annotate('far away for you', false);
+  assert.ok(!disabledOut.includes('conn-link-r'));
+  assert.ok(!disabledOut.includes('rd-weak'));
+  assert.equal((disabledOut.match(/class="rd-word"/g) || []).length, 4);
+});
+
+test('F2 annotateConnectedSpeech: 惡意 XSS 載荷必須完整 HTML 轉義（零原生標籤或事件屬性洩漏）', () => {
+  const xssSent = 'far <img src=x onerror=alert(1)> away & "quotes"';
+  const rendered = f2Ctx.annotate(xssSent, true);
+  assert.ok(!rendered.includes('<img'), '<img 標籤必須被轉義為 &lt;img');
+  assert.ok(!/<[^/!][^>]*\bonerror\s*=/i.test(rendered), '不得產生任何真實帶 onerror 屬性的 HTML 元素');
+  assert.ok(rendered.includes('&lt;img'));
+  assert.ok(rendered.includes('&amp;'));
+  assert.ok(rendered.includes('&quot;quotes&quot;'));
+});
+
+/* ---------- F3：UK_STAGE_MISSION_PROMPTS 15 任務映射與 index.html 跨檔 DOM 容器檢驗 ---------- */
+test('F3 UK_STAGE_MISSION_PROMPTS & DOM: 完整映射 m1..m15 至合法劇本 ID 且 index.html 具備全部 v1.6.0 容器', () => {
+  const stages = JSON.parse(fs.readFileSync(path.join(root, 'uk_stages.json'), 'utf8'));
+  const missionIds = [];
+  stages.forEach(stg => stg.missions.forEach(m => missionIds.push(m.id)));
+  assert.equal(missionIds.length, 15);
+
+  const promptMapMatch = engine.match(/const UK_STAGE_MISSION_PROMPTS = \{([\s\S]*?)\};/);
+  assert.ok(promptMapMatch, 'uk_engine.js 必須定義 UK_STAGE_MISSION_PROMPTS');
+  const promptMap = new Function(`return {${promptMapMatch[1]}};`)();
+
+  const tplCtx = load([
+    extractFunction(html, 'ukGpPromptName'),
+    extractFunction(html, 'buildUKGpPrompt'),
+    extractFunction(html, 'ukCouncilPromptName'),
+    extractFunction(html, 'buildUKCouncilPrompt'),
+    extractFunction(html, 'ukTenancyPromptName'),
+    extractFunction(html, 'buildUKTenancyPrompt'),
+    extractFunction(html, 'ukBanterPromptName'),
+    extractFunction(html, 'buildUKBanterPrompt'),
+    extractFunction(html, 'ukReadingPromptName'),
+    extractFunction(html, 'buildUKReadingPrompt'),
+    extractFunction(html, 'getUKTemplates'),
+    'this.ukIds = getUKTemplates("zh").map(x => x.id);'
+  ].join('\n'));
+  const validTemplateIds = new Set(['default', 'customs', ...tplCtx.ukIds]);
+
+  missionIds.forEach(id => {
+    assert.ok(promptMap[id], `Mission ${id} 必須在 UK_STAGE_MISSION_PROMPTS 中配置劇本 ID`);
+    assert.ok(validTemplateIds.has(promptMap[id]), `Mission ${id} 映射的劇本 ID "${promptMap[id]}" 不存在於 index.html 內建範本`);
+  });
+
+  // 靜態跨檔 DOM 容器契約檢驗
+  const requiredDomIds = [
+    'activeMissionBanner',
+    'toggleConnSpeechBtn',
+    'personalWeaknessRadar',
+    'popoverAiBtn',
+    'popoverAiResult'
+  ];
+  requiredDomIds.forEach(domId => {
+    assert.ok(
+      new RegExp(`id=["']${domId}["']`).test(html),
+      `index.html 必須定義 DOM 容器 #${domId}`
+    );
+  });
+});
+
+/* ---------- F4：askAiContextualExplain 守衛、Rule R5 純淨 CORS 與 JSON/純文字雙模解析 ---------- */
+function makeExplainSandbox(opts = {}) {
+  const fetchCalls = [];
+  let trackedUsage = null;
+  const settings = Object.assign({
+    chatBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai/',
+    chatModel: 'gemini-3.8-flash',
+    chatKey: 'test-gemini-key',
+    uiLang: 'zh'
+  }, opts.settings || {});
+
+  const ctx = load([
+    extractFunction(html, 'chatHeaders'),
+    extractFunction(html, 'askAiContextualExplain'),
+    'this.askAiContextualExplain = askAiContextualExplain;'
+  ].join('\n'), {
+    window: {},
+    navigator: { onLine: opts.onLine !== undefined ? opts.onLine : true },
+    AbortController,
+    setTimeout,
+    clearTimeout,
+    location: { href: 'http://127.0.0.1:8000/' },
+    getSettings: () => settings,
+    trackChatFromUsage: (u) => { trackedUsage = u; },
+    t: (k) => (k === 'misc.colon' ? '：' : k),
+    fetch: async (url, init) => {
+      fetchCalls.push({ url, init });
+      if (opts.fetchImpl) return opts.fetchImpl(url, init);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          usage: { prompt_tokens: 42, completion_tokens: 28, total_tokens: 70 },
+          choices: [{ message: { content: opts.replyContent || '{"ipa":"/ˈnækəd/","meaning":"筋疲力盡","tip":"英式口語極常用"}' } }]
+        })
+      };
+    }
+  });
+
+  return { ctx, fetchCalls, getTrackedUsage: () => trackedUsage };
+}
+
+test('F4 askAiContextualExplain: 嚴格攔截未設 API Key 與離線狀態（不發出任何網路請求）', async () => {
+  const noKeySb = makeExplainSandbox({ settings: { chatKey: '', uiLang: 'zh' } });
+  await assert.rejects(
+    () => noKeySb.ctx.askAiContextualExplain('knackered', 'I am utterly knackered.'),
+    /API Key/
+  );
+  assert.equal(noKeySb.fetchCalls.length, 0);
+
+  const offlineSb = makeExplainSandbox({ onLine: false, settings: { uiLang: 'en' } });
+  await assert.rejects(
+    () => offlineSb.ctx.askAiContextualExplain('knackered', 'I am utterly knackered.'),
+    /Offline mode/
+  );
+  assert.equal(offlineSb.fetchCalls.length, 0);
+});
+
+test('F4 askAiContextualExplain: 遵守 Rule R5 純淨 CORS 標頭，支援 ```json 圍欄剝離與純文字回退解析', async () => {
+  const fencedJson = '```json\n{"ipa":"/ˈɡʌtɪd/","meaning":"極度失望、沮喪","tip":"日常口語高頻詞，相當於 devastated"}\n```';
+  const sb = makeExplainSandbox({ replyContent: fencedJson });
+  const res = await sb.ctx.askAiContextualExplain('gutted', 'I was absolutely gutted when the train was cancelled.');
+
+  assert.equal(sb.fetchCalls.length, 1);
+  const call = sb.fetchCalls[0];
+  assert.equal(call.url, 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions');
+  assert.equal(call.init.method, 'POST');
+
+  // Rule R5 驗證：Gemini 端點僅允許 Content-Type 與 Authorization，嚴禁自訂 x-* 標頭觸發預檢失敗
+  const headerKeys = Object.keys(call.init.headers).sort();
+  assert.deepEqual(headerKeys, ['Authorization', 'Content-Type']);
+  assert.equal(call.init.headers.Authorization, 'Bearer test-gemini-key');
+  assert.equal(call.init.headers['Content-Type'], 'application/json');
+
+  const body = JSON.parse(call.init.body);
+  assert.equal(body.stream, false);
+  assert.equal(body.model, 'gemini-3.8-flash');
+
+  assert.equal(res.ipa, '/ˈɡʌtɪd/');
+  assert.equal(res.meaning, '極度失望、沮喪');
+  assert.equal(res.tip, '日常口語高頻詞，相當於 devastated');
+  assert.ok(res.formatted.includes('/ˈɡʌtɪd/') && res.formatted.includes('英式用法：'));
+  assert.equal(sb.getTrackedUsage().prompt_tokens, 42);
+
+  // 非 JSON 純文字回覆安全降級（不拋錯）
+  const plainSb = makeExplainSandbox({
+    settings: { uiLang: 'en' },
+    replyContent: 'Colloquial British adjective meaning completely exhausted after work.'
+  });
+  const plainRes = await plainSb.ctx.askAiContextualExplain('knackered', 'I am knackered.');
+  assert.equal(plainRes.ipa, '');
+  assert.equal(plainRes.tip, '');
+  assert.equal(plainRes.meaning, 'Colloquial British adjective meaning completely exhausted after work.');
+  assert.equal(plainRes.formatted, 'Colloquial British adjective meaning completely exhausted after work.');
+});
+
+
 
 
