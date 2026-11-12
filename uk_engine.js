@@ -1476,6 +1476,9 @@ function initReadingStudio() {
   const clearBtn = document.getElementById('clearReadingBtn');
   if (clearBtn) {
     clearBtn.onclick = () => {
+      stopShadowRadio();
+      dismissWordPopover();
+      currentReadingSentences = [];
       document.getElementById('readingInput').value = '';
       document.getElementById('readingStudioCard').classList.add('hidden');
     };
@@ -1531,8 +1534,10 @@ function rewardReadingEngagement() {
 let isShadowRadioActive = false;
 let shadowRadioTimer = null;
 let shadowRadioResolver = null;
+let shadowRadioSeq = 0;
 
 function stopShadowRadio(skipAudioStop) {
+  ++shadowRadioSeq;
   if (!isShadowRadioActive && !shadowRadioTimer && !shadowRadioResolver) return;
   isShadowRadioActive = false;
   if (shadowRadioTimer) {
@@ -1545,9 +1550,11 @@ function stopShadowRadio(skipAudioStop) {
     res();
   }
   if (!skipAudioStop && typeof stopCurrentUkAudio === 'function') stopCurrentUkAudio();
-  document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
-  const btn = document.getElementById('shadowRadioBtn');
-  if (btn) btn.textContent = '🎧 影子連播電台';
+  if (typeof document !== 'undefined') {
+    document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
+    const btn = document.getElementById('shadowRadioBtn');
+    if (btn) btn.textContent = '🎧 影子連播電台';
+  }
 }
 if (typeof window !== 'undefined') window.stopShadowRadio = stopShadowRadio;
 
@@ -1604,7 +1611,7 @@ async function preheatDrillsPack() {
 }
 
 async function toggleShadowRadio() {
-  const btn = document.getElementById('shadowRadioBtn');
+  const btn = (typeof document !== 'undefined') ? document.getElementById('shadowRadioBtn') : null;
   if (isShadowRadioActive) {
     stopShadowRadio();
     return;
@@ -1615,25 +1622,29 @@ async function toggleShadowRadio() {
     return;
   }
 
+  const myRunSeq = ++shadowRadioSeq;
   isShadowRadioActive = true;
   if (btn) btn.textContent = '⏹️ 停止電台連播';
   rewardReadingEngagement();
 
   let wasInterruptedExternally = false;
   for (let i = 0; i < currentReadingSentences.length; i++) {
-    if (!isShadowRadioActive) break;
+    if (!isShadowRadioActive || myRunSeq !== shadowRadioSeq) break;
     const sent = currentReadingSentences[i];
-    const item = document.getElementById('rd-item-' + i);
-    document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
-    if (item) {
-      item.classList.add('playing');
-      item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (typeof document !== 'undefined') {
+      const item = document.getElementById('rd-item-' + i);
+      document.querySelectorAll('.reading-sentence-item').forEach(el => el.classList.remove('playing'));
+      if (item) {
+        item.classList.add('playing');
+        if (item.scrollIntoView) item.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
     }
     if (btn) {
       btn.textContent = '🔊 朗讀中 (' + (i + 1) + '/' + currentReadingSentences.length + ')… — 點擊停止';
     }
 
     const playRes = await playUkVoice(sent);
+    if (myRunSeq !== shadowRadioSeq) return;
     if (!isShadowRadioActive || (playRes && playRes.interrupted)) {
       if (playRes && playRes.interrupted) wasInterruptedExternally = true;
       break;
@@ -1655,13 +1666,18 @@ async function toggleShadowRadio() {
         resolve();
       }, shadowDelayMs);
     });
+    if (myRunSeq !== shadowRadioSeq) return;
   }
 
-  stopShadowRadio(wasInterruptedExternally);
+  if (myRunSeq === shadowRadioSeq) {
+    stopShadowRadio(wasInterruptedExternally);
+  }
 }
 
 function analyzeReadingText(rawText) {
   if (!rawText) return;
+  stopShadowRadio();
+  dismissWordPopover();
   if (rawText.length > 50000) {
     alertDlg('文章長度過長（超過 50,000 字元），已為您截取前 50,000 字元進行精讀，以確保系統流暢。');
     rawText = rawText.slice(0, 50000);
@@ -1756,6 +1772,14 @@ function cancelPopoverPending() {
   if (popoverHideTimer) {
     clearTimeout(popoverHideTimer);
     popoverHideTimer = null;
+  }
+}
+
+function dismissWordPopover() {
+  cancelPopoverPending();
+  if (typeof document !== 'undefined') {
+    const pop = document.getElementById('wordPopover');
+    if (pop) pop.classList.add('hidden');
   }
 }
 
@@ -2450,8 +2474,12 @@ let currentActiveTab = 'practice';
 
 function switchTab(tabId) {
   currentActiveTab = tabId;
-  window.currentActiveTab = tabId;
+  if (typeof window !== 'undefined') window.currentActiveTab = tabId;
 
+  if (tabId !== 'reading') {
+    stopShadowRadio();
+    dismissWordPopover();
+  }
   if (tabId !== 'review' && reviewAutoTimer) {
     clearTimeout(reviewAutoTimer);
     reviewAutoTimer = null;

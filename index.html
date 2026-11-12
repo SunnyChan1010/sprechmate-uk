@@ -2287,8 +2287,11 @@ function saveConvs(c) {
   return idbSet(IDB_CONVS_KEY, payload).catch(async err => {
     if (err && (err.name === 'QuotaExceededError' || /quota/i.test(err.message || ''))) {
       try {
-        await trimTtsCache(Math.max(5, Math.floor(getSettings().ttsCacheLimit / 2)));
-        await idbSet(IDB_CONVS_KEY, payload);
+        const curTts = (typeof idbCount === 'function')
+          ? await idbCount('tts:').catch(() => 0)
+          : 0;
+        await trimTtsCache(Math.floor(curTts / 2));
+        await idbSet(IDB_CONVS_KEY, JSON.stringify(convsCache || c));
         return;
       } catch (retryErr) {}
     }
@@ -4061,7 +4064,7 @@ async function activateMissionRoleplay(tplId, openerText, autoSend) {
   if (chatHead && chatHead.scrollIntoView) {
     chatHead.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
-  if (autoSend && String(getSettings().chatKey || '').trim()) {
+  if (autoSend) {
     await sendChat();
   } else if (input && input.focus) {
     input.focus();
@@ -4271,6 +4274,7 @@ window.isAudioRecordingActive = function() {
 
 /* 切会话时跟读区回到初始状态：清空文本框、原声/录音、打分卡（练习历史由 renderHistory 按新会话重渲染） */
 function resetPracticeUI() {
+  restoreSeq++;
   if (typeof window.clearPendingReviewAssessment === 'function') window.clearPendingReviewAssessment();
   const box = $('sentenceText');
   if (box) { box.value = ''; autoGrowTextarea(box); }
@@ -5575,21 +5579,35 @@ function paLikeFromRec(rec) {
   };
 }
 
+let restoreSeq = 0;
 async function restoreRecord(convId, recId) {
   const conv = getConvs().find(c => c.id === convId);
   const rec = conv && (conv.records || []).find(r => r.id === recId);
   if (!rec) return;
+  const mySeq = ++restoreSeq;
+  if (typeof window !== 'undefined' && typeof window.stopAllAudioPlayback === 'function') {
+    window.stopAllAudioPlayback();
+  } else if (typeof refGenSeq !== 'undefined') {
+    refGenSeq++;
+  }
   $('sentenceText').value = rec.text;
   autoGrowTextarea($('sentenceText'));
   lastUserPcm16 = null;
   lastRefBlob = null;
+  lastRefText = '';
+  if (lastRefUrl) { URL.revokeObjectURL(lastRefUrl); lastRefUrl = null; }
+  if (refPlayer && refPlayer.clear) refPlayer.clear();
+  if (myRecordingUrl) { URL.revokeObjectURL(myRecordingUrl); myRecordingUrl = null; }
+  if (myPlayer && myPlayer.clear) myPlayer.clear();
   renderResult(paLikeFromRec(rec), rec.recognizedText || '', true);
   try {
     // 原声就是 TTS：先兼容旧版本存的 ref:，没有则走 TTS 缓存（一般命中，不调 API）
     let refBlob = await idbGet('ref:' + recId).catch(() => null);
+    if (mySeq !== restoreSeq) return;
     if (!refBlob) {
       try { refBlob = (await ttsCached(rec.text, rec.voice)).blob; } catch (e) {}
     }
+    if (mySeq !== restoreSeq) return;
     if (refBlob) {
       if (lastRefUrl) URL.revokeObjectURL(lastRefUrl);
       lastRefUrl = URL.createObjectURL(refBlob);
@@ -5597,16 +5615,21 @@ async function restoreRecord(convId, recId) {
       refPlayer.load(lastRefUrl, true); // 自动播放原声
     }
   } catch (e) {}
+  if (mySeq !== restoreSeq) return;
   try {
     const myBlob = await idbGet('my:' + recId);
+    if (mySeq !== restoreSeq) return;
     if (myBlob) {
       if (myRecordingUrl) URL.revokeObjectURL(myRecordingUrl);
       myRecordingUrl = URL.createObjectURL(myBlob);
       myPlayer.load(myRecordingUrl, false);
-      lastUserPcm16 = await decodeToPcm16k(myBlob);
+      const decodedPcm = await decodeToPcm16k(myBlob);
+      if (mySeq !== restoreSeq) return;
+      lastUserPcm16 = decodedPcm;
       await drawProsodyMirror(paLikeFromRec(rec).detailResult.Words);
     }
   } catch (e) {}
+  if (mySeq !== restoreSeq) return;
   $('recordCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 

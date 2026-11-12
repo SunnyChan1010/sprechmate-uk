@@ -718,8 +718,9 @@ test('E3 applyReviewRating: dailyReviewsDone 逐張遞增，滿 5 張或待重�
 });
 
 /* ---------- E4：saveConvs IndexedDB QuotaExceededError 自癒機制 ---------- */
-test('E4 saveConvs: 遭遇 QuotaExceededError 時自動呼叫 trimTtsCache 並單次重試成功，不誤彈滿載警告', async () => {
+test('E4 saveConvs: 遭遇 QuotaExceededError 時動態依 idbCount("tts:") 減半裁剪，並以最新 convsCache 單次重試成功', async () => {
   const calls = [];
+  const writtenPayloads = [];
   let alerts = 0;
   let attempt = 0;
 
@@ -731,15 +732,22 @@ test('E4 saveConvs: 遭遇 QuotaExceededError 時自動呼叫 trimTtsCache 並�
     extractFunction(html, 'saveConvs'),
     'this.saveConvs = saveConvs;',
     'this.getWarned = () => convsSaveWarned;',
-    'this.setLoaded = v => { convsLoaded = v; };'
+    'this.setLoaded = v => { convsLoaded = v; };',
+    'this.mutateCache = v => { convsCache = v; };'
   ].join('\n'), {
-    getSettings: () => ({ ttsCacheLimit: 80 }),
+    idbCount: async (prefix) => {
+      calls.push(['idbCount', prefix]);
+      return 18; // 即使快取條數 <= 50，仍能精準釋放一半 (9 條)
+    },
     trimTtsCache: async (keepCount) => {
       calls.push(['trimTtsCache', keepCount]);
+      // 模擬裁剪等待期間使用者新增了訊息，更新了記憶體中的 convsCache
+      quotaCtx.mutateCache([{ id: 'conv_1', messages: [{ role: 'user', content: 'newer' }] }]);
     },
     idbSet: async (key, val) => {
       attempt++;
       calls.push(['idbSet', key, attempt]);
+      writtenPayloads.push(val);
       if (attempt === 1) {
         const qErr = new Error('The quota has been exceeded.');
         qErr.name = 'QuotaExceededError';
@@ -753,19 +761,25 @@ test('E4 saveConvs: 遭遇 QuotaExceededError 時自動呼叫 trimTtsCache 並�
   await quotaCtx.saveConvs([{ id: 'conv_1', messages: [] }]);
   assert.deepEqual(calls, [
     ['idbSet', 'json:convs', 1],
-    ['trimTtsCache', 40],
+    ['idbCount', 'tts:'],
+    ['trimTtsCache', 9],
     ['idbSet', 'json:convs', 2]
   ]);
+  assert.deepEqual(
+    JSON.parse(writtenPayloads[1]),
+    [{ id: 'conv_1', messages: [{ role: 'user', content: 'newer' }] }],
+    '重試寫盤時必須序列化最新 convsCache，不得以舊快照覆寫新訊息'
+  );
   assert.equal(alerts, 0, '自癒重試成功時不得彈出 storageFull 警告');
   assert.equal(quotaCtx.getWarned(), false);
 
   // 未載入完成前呼叫 saveConvs 不得觸碰 IndexedDB
   quotaCtx.setLoaded(false);
   await quotaCtx.saveConvs([{ id: 'conv_2', messages: [] }]);
-  assert.equal(calls.length, 3, 'convsLoaded 為 false 時禁止寫入 IndexedDB');
+  assert.equal(calls.length, 4, 'convsLoaded 為 false 時禁止寫入 IndexedDB');
 });
 
-test('E4 saveConvs: 若裁剪快取後重試依然滿載，僅彈出一次 storageFull 警告', async () => {
+test('E4 saveConvs: 若裁剪快取後重試依然滿載（含僅剩 1 筆快取歸零），僅彈出一次 storageFull 警告', async () => {
   let alerts = 0;
   let trimArg = null;
   const failCtx = load([
@@ -776,7 +790,7 @@ test('E4 saveConvs: 若裁剪快取後重試依然滿載，僅彈出一次 stora
     extractFunction(html, 'saveConvs'),
     'this.saveConvs = saveConvs;'
   ].join('\n'), {
-    getSettings: () => ({ ttsCacheLimit: 6 }),
+    idbCount: async () => 1,
     trimTtsCache: async (keepCount) => { trimArg = keepCount; },
     idbSet: async () => {
       const err = new Error('Quota exceeded');
@@ -789,7 +803,7 @@ test('E4 saveConvs: 若裁剪快取後重試依然滿載，僅彈出一次 stora
 
   await failCtx.saveConvs([{ id: 'c1' }]);
   await failCtx.saveConvs([{ id: 'c1' }]);
-  assert.equal(trimArg, 5, '最小保留門檻 Math.max(5, floor(6/2)) 應為 5');
+  assert.equal(trimArg, 0, 'floor(1 / 2) 應為 0，連最後 1 條快取亦可釋放');
   assert.equal(alerts, 1, '連續失敗僅提示一次，不洗版');
 });
 
@@ -1063,6 +1077,220 @@ test('F4 askAiContextualExplain: 遵守 Rule R5 純淨 CORS 標頭，支援 ```j
   assert.equal(plainRes.meaning, 'Colloquial British adjective meaning completely exhausted after work.');
   assert.equal(plainRes.formatted, 'Colloquial British adjective meaning completely exhausted after work.');
 });
+
+/* ---------- E2 併發與狀態清理：restoreRecord restoreSeq 防抖與缺 Blob 播放器重置 ---------- */
+test('E2 restoreRecord: 快速連點 Record A -> B 時丟棄 A 過期回呼，且缺失 Blob 時清空 refPlayer/myPlayer', async () => {
+  let resolveSlowTtsA = null;
+  const refPlayerState = { src: 'blob:old-ref', cleared: 0, loads: [] };
+  const myPlayerState = { src: 'blob:old-my', cleared: 0, loads: [] };
+  const mirrorCalls = [];
+  const sentenceBox = { value: '' };
+  let stopAllCount = 0;
+
+  const convsData = [{
+    id: 'c1',
+    records: [
+      { id: 'recA', text: 'Slow sentence A', voice: 'en-GB-SoniaNeural', score: 80, accuracy: 80, fluency: 80, completeness: 80, words: [{ w: 'Slow', o: 100, d: 200, score: 80, err: 'None', phonemes: [] }] },
+      { id: 'recB', text: 'Fast sentence B', voice: 'en-GB-SoniaNeural', score: 92, accuracy: 92, fluency: 92, completeness: 92, words: [{ w: 'Fast', o: 300, d: 400, score: 92, err: 'None', phonemes: [] }] },
+      { id: 'recEmpty', text: 'Evicted blobs C', voice: 'en-GB-SoniaNeural', score: 75, accuracy: 75, fluency: 75, completeness: 75, words: [] }
+    ]
+  }];
+
+  const restoreCtx = load([
+    'let restoreSeq = 0;',
+    'let refGenSeq = 0;',
+    'let lastUserPcm16 = null;',
+    'let lastRefBlob = null;',
+    'let lastRefText = "";',
+    'let lastRefUrl = "blob:prev-ref";',
+    'let myRecordingUrl = "blob:prev-my";',
+    extractFunction(html, 'paLikeFromRec'),
+    extractFunction(html, 'restoreRecord'),
+    'this.restoreRecord = restoreRecord;',
+    'this.getState = () => ({ lastRefText, lastRefUrl, myRecordingUrl, lastUserPcm16 });'
+  ].join('\n'), {
+    window: { stopAllAudioPlayback: () => { stopAllCount++; } },
+    getConvs: () => convsData,
+    $: (id) => (id === 'sentenceText' ? sentenceBox : { scrollIntoView: () => {} }),
+    autoGrowTextarea: () => {},
+    renderResult: () => {},
+    URL: {
+      createObjectURL: (b) => 'blob:' + b.tag,
+      revokeObjectURL: () => {}
+    },
+    refPlayer: {
+      clear() { refPlayerState.src = ''; refPlayerState.cleared++; },
+      load(u, auto) { refPlayerState.src = u; refPlayerState.loads.push([u, auto]); }
+    },
+    myPlayer: {
+      clear() { myPlayerState.src = ''; myPlayerState.cleared++; },
+      load(u, auto) { myPlayerState.src = u; myPlayerState.loads.push([u, auto]); }
+    },
+    idbGet: async (k) => {
+      if (k === 'my:recA') return { tag: 'myA' };
+      if (k === 'my:recB') return { tag: 'myB' };
+      return null;
+    },
+    ttsCached: (txt) => {
+      if (txt === 'Slow sentence A') {
+        return new Promise(res => { resolveSlowTtsA = () => res({ blob: { tag: 'refA' } }); });
+      }
+      if (txt === 'Fast sentence B') {
+        return Promise.resolve({ blob: { tag: 'refB' } });
+      }
+      return Promise.reject(new Error('offline'));
+    },
+    decodeToPcm16k: async (b) => b.tag + '-pcm',
+    drawProsodyMirror: async (words) => { mirrorCalls.push(words[0] && words[0].Word); }
+  });
+
+  // 先點 Record A（卡在慢速網路 TTS），隨即點 Record B（快取秒回）
+  const pA = restoreCtx.restoreRecord('c1', 'recA');
+  await new Promise(r => setImmediate(r));
+  const pB = restoreCtx.restoreRecord('c1', 'recB');
+  await pB;
+
+  // 此時才讓 Record A 的慢請求返回，不得覆蓋 Record B 的播放器與波形
+  resolveSlowTtsA();
+  await pA;
+
+  assert.equal(stopAllCount, 2);
+  assert.equal(sentenceBox.value, 'Fast sentence B');
+  assert.equal(refPlayerState.src, 'blob:refB', 'Record A 慢回呼不得覆寫 Record B 的原聲播放器');
+  assert.equal(myPlayerState.src, 'blob:myB', 'Record A 不得覆寫 Record B 的錄音播放器');
+  assert.equal(restoreCtx.getState().lastUserPcm16, 'myB-pcm');
+  assert.deepEqual(mirrorCalls, ['Fast'], 'drawProsodyMirror 僅能繪製最新選中的 Record B');
+
+  // 點擊 Blob 已被淘汰/離線缺失的 recEmpty：兩個播放器必須處於清空狀態（不得殘留 recB 音訊）
+  await restoreCtx.restoreRecord('c1', 'recEmpty');
+  assert.equal(refPlayerState.src, '', '缺失 refBlob 時 refPlayer 必須被 clear()');
+  assert.equal(myPlayerState.src, '', '缺失 myBlob 時 myPlayer 必須被 clear()');
+  assert.equal(restoreCtx.getState().lastUserPcm16, null);
+});
+
+/* ---------- E1 併發與分頁清理：toggleShadowRadio shadowRadioSeq 與 switchTab 連動 ---------- */
+test('E1 toggleShadowRadio & switchTab: Start->Stop->Start 舊輪次不誤殺新輪次，切離 reading 分頁自動停播並收起查詞彈窗', async () => {
+  const voiceResolvers = [];
+  const btnEl = { textContent: '🎧 影子連播電台' };
+  const popEl = {
+    hidden: false,
+    classList: {
+      add(c) { if (c === 'hidden') popEl.hidden = true; },
+      remove(c) { if (c === 'hidden') popEl.hidden = false; },
+      contains(c) { return c === 'hidden' ? popEl.hidden : false; }
+    }
+  };
+  let abortCalled = 0;
+
+  const radioCtx = load([
+    "let currentActiveTab = 'reading';",
+    'let reviewAutoTimer = null;',
+    'let pendingReviewAssessmentId = null;',
+    "let currentReadingSentences = ['First chunk.', 'Second chunk.'];",
+    'let isShadowRadioActive = false;',
+    'let shadowRadioTimer = null;',
+    'let shadowRadioResolver = null;',
+    'let shadowRadioSeq = 0;',
+    'let popoverAiAbort = { abort() { onAbort(); } };',
+    'let popoverHideTimer = null;',
+    extractFunction(engine, 'cancelPopoverPending'),
+    extractFunction(engine, 'dismissWordPopover'),
+    extractFunction(engine, 'stopShadowRadio'),
+    extractFunction(engine, 'toggleShadowRadio'),
+    extractFunction(engine, 'switchTab'),
+    'this.toggleShadowRadio = toggleShadowRadio;',
+    'this.stopShadowRadio = stopShadowRadio;',
+    'this.switchTab = switchTab;',
+    'this.isActive = () => isShadowRadioActive;'
+  ].join('\n'), {
+    window: { scrollTo: () => {} },
+    onAbort: () => { abortCalled++; },
+    document: {
+      getElementById: (id) => {
+        if (id === 'shadowRadioBtn') return btnEl;
+        if (id === 'wordPopover') return popEl;
+        return { classList: { add() {}, remove() {}, toggle() {}, contains: () => true } };
+      },
+      querySelectorAll: () => []
+    },
+    rewardReadingEngagement: () => {},
+    stopCurrentUkAudio: () => {},
+    playUkVoice: (sent) => new Promise(res => { voiceResolvers.push({ sent, res }); }),
+    setTimeout,
+    clearTimeout
+  });
+
+  // 1. 啟動 Run #1（停在 playUkVoice）
+  const run1 = radioCtx.toggleShadowRadio();
+  await new Promise(r => setImmediate(r));
+  assert.equal(radioCtx.isActive(), true);
+  assert.equal(voiceResolvers.length, 1);
+
+  // 2. 點擊停止，並立即啟動 Run #2
+  await radioCtx.toggleShadowRadio(); // Stop Run #1
+  assert.equal(radioCtx.isActive(), false);
+  const run2 = radioCtx.toggleShadowRadio(); // Start Run #2
+  await new Promise(r => setImmediate(r));
+  assert.equal(radioCtx.isActive(), true);
+  assert.equal(voiceResolvers.length, 2);
+
+  // 3. 此時 Run #1 的過期 playUkVoice 才以 interrupted:true 結算：絕不可把 Run #2 關掉！
+  voiceResolvers[0].res({ durationMs: 0, interrupted: true });
+  await run1;
+  assert.equal(radioCtx.isActive(), true, 'Run #1 退出時不得誤殺正在執行的 Run #2');
+  assert.ok(btnEl.textContent.includes('朗讀中'), 'Run #2 按鈕狀態應保持朗讀中');
+
+  // 4. 切換至 practice 分頁：應立即停止 Run #2 並取消/隱藏 #wordPopover
+  radioCtx.switchTab('practice');
+  assert.equal(radioCtx.isActive(), false, '離開精讀分頁時必須自動停止影子電台');
+  assert.equal(btnEl.textContent, '🎧 影子連播電台');
+  assert.equal(popEl.hidden, true, '離開精讀分頁時必須隱藏 #wordPopover');
+  assert.equal(abortCalled, 1, '離開精讀分頁時必須中止在途 AI 查詞請求');
+
+  voiceResolvers[1].res({ durationMs: 0, interrupted: true });
+  await run2;
+});
+
+/* ---------- F3 互動回饋：activateMissionRoleplay 無 Key 時觸發 sendChat 提示並保留開場白 ---------- */
+test('F3 activateMissionRoleplay: autoSend=true 且未設 API Key 時仍呼叫 sendChat 彈出引導，並完整保留輸入框開場白', async () => {
+  const alerts = [];
+  const inputEl = { value: '', focused: false, focus() { this.focused = true; }, blur() {} };
+  let convObj = { id: 'c1', promptId: 'default', messages: [] };
+
+  const f3RoleCtx = load([
+    'let dictFocusAfter = true;',
+    'let dictRec = null;',
+    extractFunction(html, 'sendChat'),
+    extractFunction(html, 'activateMissionRoleplay'),
+    'this.activateMissionRoleplay = activateMissionRoleplay;'
+  ].join('\n'), {
+    document: { querySelector: () => null },
+    $: (id) => (id === 'chatInput' ? inputEl : null),
+    autoGrowTextarea: () => {},
+    getSettings: () => ({
+      chatBaseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+      chatModel: 'gemini-3.8-flash',
+      chatKey: '',
+      promptTemplates: [{ id: 'uk_gp', name: 'GP', content: 'GP prompt' }]
+    }),
+    activeConv: () => convObj,
+    newConversation: () => {},
+    persistConv: () => {},
+    refreshConvPromptSel: () => {},
+    renderConvList: () => {},
+    renderChat: () => {},
+    sendChatCore: async () => { throw new Error('Should not call sendChatCore without key'); },
+    alertDlg: async (msg) => { alerts.push(msg); },
+    t: (k) => k
+  });
+
+  const opener = "Hello, I'd like to book an appointment with a GP, please.";
+  await f3RoleCtx.activateMissionRoleplay('uk_gp', opener, true);
+  assert.deepEqual(alerts, ['chat.noKey'], '未填 API Key 點擊「載入劇本並與 AI 對練」必須彈出 chat.noKey 提示');
+  assert.equal(inputEl.value, opener, '彈出無 Key 提示後輸入框內的任務開場白必須保留，不得被清空');
+  assert.equal(convObj.promptId, 'uk_gp');
+});
+
 
 
 

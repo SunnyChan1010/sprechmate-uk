@@ -3,7 +3,7 @@
  * 策略：本站 GET 請求走網路優先（帶超時競速），失敗或弱網超時時讀快取；API 與 CDN 請求不攔截。
  * 注意：更新 index.html 後刷新頁面即生效，無需手動清快取。
  */
-const CACHE = 'sprechmate-uk-v9';
+const CACHE = 'sprechmate-uk-v10';
 const ASSETS = [
   './',
   'index.html',
