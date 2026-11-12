@@ -464,6 +464,25 @@ test('#4 Recording Lifecycle: abortActiveRecording 丟棄半截錄音並停軌�
   tabCtx.switchTab('reading');
   assert.equal(abortCalls, 2, "switchTab('reading') 離開跟讀分頁時必須呼叫 window.abortActiveRecording()");
 
+  // 驗證頁面切至背景（visibilitychange -> hidden）時亦會自動呼叫 abortActiveRecording()
+  const visMatch = html.match(/document\.addEventListener\('visibilitychange',[\s\S]*?window\.addEventListener\('pagehide',[\s\S]*?\}\);/);
+  assert.ok(visMatch, 'index.html 必須註冊 visibilitychange 與 pagehide 生命週期清理監聽器');
+  let visHandler = null;
+  const visDoc = {
+    visibilityState: 'hidden',
+    addEventListener(ev, fn) { if (ev === 'visibilitychange') visHandler = fn; }
+  };
+  load(visMatch[0], {
+    document: visDoc,
+    window: { addEventListener: () => {} },
+    abortActiveRecording: () => { abortCalls++; },
+    convsDirty: false,
+    flushConvsNow: () => {}
+  });
+  assert.equal(typeof visHandler, 'function');
+  visHandler();
+  assert.equal(abortCalls, 3, "visibilitychange ('hidden') 必須呼叫 abortActiveRecording() 釋放背景麥克風");
+
   // 4. 驗證 startRecording() 當 MediaRecorder 建構拋出例外時，catch 區塊必定停止已取得的麥克風軌道
   let leakedTracksStopped = 0;
   const errSandbox = load([
@@ -1246,10 +1265,13 @@ test('#12 Tooling, Manifest & Static Gates: manifest ./?checkin=1、全庫零動
   }
   assert.equal(tShadowHits.length, 0, 'Found single-letter t shadowing:\n' + tShadowHits.join('\n'));
 
-  // 4. start-uk.ps1 嚴格綁定 127.0.0.1、具備 TcpClient 就緒輪詢且純 zh-HK 無簡體字
+  // 4. start-uk.ps1 嚴格綁定 127.0.0.1、15s TcpClient 就緒輪詢、Windows npx.cmd 與 Python 偽捷徑防呆、純 zh-HK 無簡體字
   const ps1 = fs.readFileSync(path.join(root, 'start-uk.ps1'), 'utf8');
   assert.ok(ps1.includes('$bindHost = "127.0.0.1"'), 'start-uk.ps1 必須綁定 127.0.0.1');
   assert.ok(!ps1.includes('0.0.0.0'), 'start-uk.ps1 嚴禁出現 0.0.0.0');
   assert.ok(ps1.includes('System.Net.Sockets.TcpClient'), 'start-uk.ps1 必須具備 TCP 埠口就緒輪詢');
+  assert.ok(ps1.includes('$MaxWaitMs = 15000'), 'start-uk.ps1 MaxWaitMs 必須為 15000ms 以容納 npx serve 冷啟動');
+  assert.ok(ps1.includes('Get-Command npx.cmd'), 'start-uk.ps1 於 Windows 必須優先解析 npx.cmd 避免 Start-Process 執行 npx.ps1 崩潰');
+  assert.ok(ps1.includes('--version') && ps1.includes('$LASTEXITCODE'), 'start-uk.ps1 必須驗證 python --version 排除 WindowsApps Store 偽捷徑');
   assert.equal(/[启动检测请装传浏览务专开]/u.test(ps1), false, 'start-uk.ps1 不得殘留簡體中文字元');
 });

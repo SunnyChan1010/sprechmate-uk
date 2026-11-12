@@ -2398,11 +2398,15 @@ function saveConvs(c, immediate) {
     }
   });
 }
-// 頁面切換至背景／關閉前，僅在有未落盤變更（convsDirty）時沖刷寫入 IndexedDB
+// 頁面切換至背景／關閉前，自動中止未完成錄音，並僅在有未落盤變更（convsDirty）時沖刷寫入 IndexedDB
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && convsDirty) flushConvsNow();
+  if (document.visibilityState === 'hidden') {
+    if (typeof abortActiveRecording === 'function') abortActiveRecording();
+    if (convsDirty) flushConvsNow();
+  }
 });
 window.addEventListener('pagehide', () => {
+  if (typeof abortActiveRecording === 'function') abortActiveRecording();
   if (convsDirty) flushConvsNow();
 });
 // 把内存中的对话写回存储（替换同 id 的旧版本）

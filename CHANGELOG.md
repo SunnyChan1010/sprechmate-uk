@@ -6,22 +6,22 @@
 
 ### 🛡️ 全鏈路應用安全加固、音訊生命週期治理與渲染效能最佳化 (AppSec Hardening, Audio Lifecycle & Runtime Optimization)
 - **#1 API 端點驗證、設定白名單隔離與憑證防洩漏 (`normalizeChatBaseUrl`、`importSettingsFile`、`chatHeaders` & `isSafeAzureVoiceName`)**：
-  - 實作 `normalizeChatBaseUrl(raw)`，以標準 `URL` 解析器嚴格拒絕 `javascript:`／非本機回環 `http://`、內嵌帳密（`username`/`password`）及 Query／Hash 參數，僅允許合法 `https://` 或本機回環（`127.0.0.1`、`localhost`、`[::1]`）端點。
+  - 實作 `normalizeChatBaseUrl(raw)`，以標準 `URL` 解析器嚴格拒絕 `javascript:`／非本機回環 `http://`、內嵌帳密（`username`/`password`）及 Query／Hash 參數，僅允許合法 `https://` 或本機回環（`127.0.0.1`、`localhost`）端點。
   - 加固 `importSettingsFile`：僅白名單合併 `DEFAULTS` 已知鍵名；當匯入檔變更或缺省回退 `chatBaseUrl` 且未附帶新 `chatKey` 時，強制清空舊 `chatKey`，杜絕惡意設定檔將既有 Bearer 金鑰導向外部伺服器。
   - 收緊 `chatHeaders(s)`：`HTTP-Referer` 僅於主機名為 `openrouter.ai` 或 `*.openrouter.ai` 時傳送純淨 `location.origin`（絕不外洩完整 `location.href` 或匹配偽造子字串網域）。
   - 新增 `isSafeAzureVoiceName(v)` 並於 `azureTtsBlob` 對語音角色名稱強制執行白名單校驗與 `escapeXml()` 轉義，阻斷 SSML／XML 屬性注入。
 - **#2 雙層內容安全政策（CSP）、HTTP 安全標頭與 Worker 記憶體回收 (`index.html`、`_headers` & `qr-scanner-worker.min.js`)**：
-  - 於 `index.html` 注入嚴格 `<meta http-equiv="Content-Security-Policy">`（鎖定 `default-src 'self'`、`object-src 'none'`、`base-uri 'self'`、`form-action 'none'` 與受控雲端語音／AI 連線白名單）及 `<meta name="referrer" content="no-referrer"/>`，並為外部連結補齊 `rel="noopener noreferrer"`。
+  - 於 `index.html` 注入嚴格 `<meta http-equiv="Content-Security-Policy">`（鎖定 `default-src 'self'`、`object-src 'none'`、`base-uri 'self'`、`form-action 'self'` 與受控雲端語音／AI 連線白名單）及 `<meta name="referrer" content="no-referrer"/>`，並為外部連結補齊 `rel="noopener noreferrer"`。
   - 新增 Cloudflare Pages `_headers` 設定檔，補齊 `X-Frame-Options: DENY`、`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、`Permissions-Policy: camera=(self), microphone=(self), geolocation=()` 與 HTTP 層 `frame-ancestors 'none'`。
-  - 修復 `qr-scanner-worker.min.js` 相機連續掃描幀之 `URL.createObjectURL` 洩漏，於圖片 `onload`／`onerror` 雙路徑即時呼叫 `URL.revokeObjectURL`。
+  - 修復 `qr-scanner-worker.min.js` 之 `createWorker()` 內嵌腳本 `URL.createObjectURL` 洩漏，於 Worker 首次 `message`／`error` 事件（`{ once: true }`）及 `5000ms` 逾時兜底雙路徑自動呼叫 `URL.revokeObjectURL`。
 - **#3 Markdown 行內連結與網址字元無損渲染 (`mdInline`)**：
   - 重構 `mdInline(s)` 採用「行內碼保護 ➔ 連結提取與網址獨立轉義 ➔ 粗斜體／刪除線渲染 ➔ 佔位符還原」四段式流水線，徹底修復含底線 `_`、星號 `*` 或波浪號 `~` 之網址（如 Wikipedia 條目連結）遭誤拆為斜體／刪除線標籤之問題，同時支援 `[**粗體連結**](https://...)` 並嚴格攔截偽協定。
 - **#4 Web Audio 錄音互斥中止與 iOS 背景喚醒自癒 (`abortActiveRecording` & `startMeter`)**：
-  - 新增 `abortActiveRecording()`：當用戶於錄音中途切換分頁（`switchTab`）、開啟設定（`openSettings`）、切換對話或頁面隱藏（`visibilitychange`）時，立即設定丟棄旗標、停止 `MediaRecorder` 與實體麥克風軌道並回收頻譜分析器，絕不將半截錄音誤送評測或寫入歷史紀錄。
+  - 新增 `abortActiveRecording()`：當用戶於錄音中途切換分頁（`switchTab`）、開啟設定（`openSettings`）、切換對話或頁面隱藏／關閉（`visibilitychange`／`pagehide`）時，立即設定丟棄旗標、停止 `MediaRecorder` 與實體麥克風軌道並回收頻譜分析器，絕不將半截錄音誤送評測或寫入歷史紀錄。
   - `startMeter` 於複用全站單例 `AudioContext` 時自動檢測 `'suspended'` 狀態並執行 `resume()`，修復行動裝置鎖屏返回後音量條凍結問題。
 - **#5、`#6`、`#10` 狀態快取、IndexedDB 防抖寫入與長文精讀分批渲染最佳化**：
   - **設定讀取 `O(1)` 快取 (`peekSettings`)**：新增唯讀快取存取器 `peekSettings()`，讓高頻介面多語系查詢 `t()` 免除每次 `JSON.parse` 與淺拷貝配置開銷，同時保留 `getSettings()` 回傳隔離副本之安全語意。
-  - **對話寫入合併與韻律波形去重解碼 (`saveConvs`、`flushConvsNow` & `lastRefPcm16`)**：為 `saveConvs()` 引入 `convsDirty` 髒旗標與 250ms 防抖合併寫入（同時維持回傳 Promise 於實際寫盤完成後 resolve 及 `QuotaExceededError` 自癒契約），於 `pagehide`／`visibilitychange` 主動呼叫 `flushConvsNow()`，並透過 `lastRefPcm16` 快取避免原聲 WAV 於每次評測後重複 `decodeAudioData`。
+  - **對話寫入合併與韻律波形去重解碼 (`saveConvs`、`flushConvsNow` & `lastRefPcm16`)**：為 `saveConvs()` 引入 `convsDirty` 髒旗標與 `80ms` 防抖合併寫入（同時維持回傳 Promise 於實際寫盤完成後 resolve 及 `QuotaExceededError` 自癒契約），於 `pagehide`／`visibilitychange` 主動呼叫 `flushConvsNow()`，並透過 `lastRefPcm16` 快取避免原聲 WAV 於每次評測後重複 `decodeAudioData`。
   - **長文精讀分批渲染與事件委派 (`renderReadingStudio`)**：單次初始渲染上限設為 80 個語塊並提供「⬇️ 載入更多句子」按鈕，將句卡按鈕全面改為容器級 `[data-rd-act]` 事件委派，且「🎧 影子連播電台」跨過第 80 句時自動平滑擴展後續語塊。
 - **#7、`#8`、`#9`、`#11`、`#12` 離線快取防毒、彈窗堆疊無障礙、TTS 音訊相容與自動化驗證網**：
   - **Service Worker 快取防污染升級 (`sw.js` `sprechmate-uk-v11`)**：新增 `AbortController` 逾時主動 `abort()`、攔截公共 Wi-Fi Captive Portal 將 `text/html` 登入頁寫入 `.js`／`.css`／`.json` 快取之攻擊向量，並以 `e.waitUntil` 保護背景 `cache.put`。
