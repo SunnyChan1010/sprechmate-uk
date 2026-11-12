@@ -27,6 +27,8 @@
   - 於 `wrapLines(g, text, maxW, balance)` 內快取重複權杖之 `measureText` 寬度（`Map`），並預先建立非空白權杖前綴和陣列 `nonSpPrefix`（`Int32Array`），以 `O(1)` 差值查詢取代動態規劃內層迴圈之 `.slice().every()` 二次方陣列配置。
 - **P10 Service Worker 快取控制代碼記憶化與版本升級 (`sw.js` `sprechmate-uk-v12` & `getAppCache`)**：
   - 升級快取版本至 `sprechmate-uk-v12`，新增模組級 `getAppCache()` 記憶化單例 `caches.open(CACHE)` Promise（失敗自動重置），於 `install`、`getCachedFallback(req)` 與背景寫回直接操作已開啟之 `Cache` 控制代碼而非每次攔截掃描全域 `CacheStorage`，並 100% 保留 Captive Portal `text/html` 防污染、`AbortController` 逾時中止與同源 `GET` 安全防線。
+- **P1–P10 等價性與微基準測試網 (`tests/perf_optimization.test.js`)**：
+  - 新增 10 組涵蓋 `P1`–`P10` 行為／數學等價性與 `performance.now()` 微基準測試套件，全倉庫自動化測試擴充至 **70 / 70 項全數通過**（`45` 核心單元測試 + `15` AppSec 回歸測試 + `10` 效能與等價基準測試，零 `eval`／`new Function`）。
 
 ---
 

@@ -242,7 +242,7 @@ test('#2 CSP & Security Headers: index.html meta CSP/referrer、_headers 標頭�
 
   assert.ok(/<meta\s+name="referrer"\s+content="no-referrer"\s*\/>/i.test(html), '必須宣告 referrer no-referrer');
   assert.ok(/class="ver-link"[^>]*rel="noopener noreferrer"/i.test(html), '外部連結必須包含 rel="noopener noreferrer"');
-  assert.ok(html.includes('v1.6.1'), 'index.html 版本號應更新為 v1.6.1');
+  assert.ok(html.includes('v1.6.2'), 'index.html 版本號應更新為 v1.6.2');
 
   const headersPath = path.join(root, '_headers');
   assert.ok(fs.existsSync(headersPath), '根目錄必須存在 Cloudflare Pages _headers');
@@ -648,9 +648,9 @@ test('#6 saveConvs & flushConvsNow: 合併高頻連續寫入、convsDirty 略過
 });
 
 /* =========================================================================
- * #7 [Medium] Service Worker v11, AbortController, Captive Portal Guard & waitUntil
+ * #7 [Medium] Service Worker v12, AbortController, Captive Portal Guard & waitUntil
  * ========================================================================= */
-test('#7 sw.js: CACHE=sprechmate-uk-v11、攔截 Captive Portal text/html 污染非 HTML 資產、逾時 abort 與 e.waitUntil', async () => {
+test('#7 sw.js: CACHE=sprechmate-uk-v12、攔截 Captive Portal text/html 污染非 HTML 資產、逾時 abort 與 e.waitUntil', async () => {
   const listeners = {};
   const cacheMap = new Map();
   cacheMap.set('http://127.0.0.1:8000/uk_engine.js', { status: 200, body: '/* cached js */' });
@@ -687,7 +687,7 @@ test('#7 sw.js: CACHE=sprechmate-uk-v11、攔截 Captive Portal text/html 污染
     clearTimeout
   });
 
-  assert.equal(swCtx.CACHE, 'sprechmate-uk-v11');
+  assert.equal(swCtx.CACHE, 'sprechmate-uk-v12');
 
   // 1. Captive Portal 測試：請求 .js 卻收到 200 text/html 登入頁 -> 必須拒絕寫入快取並回退既有快取
   let putCount = 0;
